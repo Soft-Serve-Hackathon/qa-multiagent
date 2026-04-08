@@ -69,6 +69,10 @@ class TriageAgent:
                     )
                     return None
 
+                # Extract attributes while session is open
+                incident_title = incident.title
+                incident_description = incident.description
+
                 # ── 2️⃣ Update status to TRIAGING ──────────────────────────────────
                 incident.status = IncidentStatus.TRIAGING.value
                 db.commit()
@@ -84,8 +88,8 @@ class TriageAgent:
             )
 
             triage_data = self.llm_client.process_triage(
-                incident_title=incident.title,
-                incident_description=incident.description,
+                incident_title=incident_title,
+                incident_description=incident_description,
                 attachment_image_base64=attachment_image_base64,
                 attachment_log_text=attachment_log_text,
                 trace_id=trace_id,
