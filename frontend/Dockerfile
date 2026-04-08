@@ -6,7 +6,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci --prefer-offline
 
 # ── Stage 2: builder ───────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ ARG NEXT_PUBLIC_API_URL=http://backend:8000/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY frontend/ .
 
 RUN npm run build
 
