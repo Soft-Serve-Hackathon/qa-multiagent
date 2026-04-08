@@ -12,7 +12,7 @@ import time
 from contextlib import contextmanager
 from typing import Any, Generator, Optional
 
-from src.domain.enums import ObservabilityStage, ObservabilityStatus
+from ...domain.enums import ObservabilityStage, ObservabilityStatus
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def emit_event(
 
     Returns the event dict (useful for testing / chaining).
     """
-    from src.infrastructure.database import ObservabilityEventModel, get_db
+    from ...infrastructure.database import ObservabilityEventModel, get_db
 
     meta = metadata or {}
     event_dict = {

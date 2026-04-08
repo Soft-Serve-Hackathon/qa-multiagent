@@ -9,10 +9,10 @@
 ## Base URL
 
 ```
-http://localhost:3000
+http://localhost:8000
 ```
 
-Todos los endpoints son servidos por FastAPI. El frontend (HTML estático) también es servido por FastAPI en la ruta raíz.
+El backend (FastAPI) corre en el puerto 8000. El frontend (Next.js) corre en el puerto 3000 y hace proxy de `/api/*` → `http://localhost:8000/api/*` via rewrites.
 
 ---
 
@@ -68,10 +68,10 @@ Posibles valores de `error`:
 
 ---
 
-### GET /api/incidents/:id
+### GET /api/incidents/:trace_id
 **Descripción:** Consulta el estado actual de un incidente en el pipeline.
 
-**Path params:** `id` — integer, el incident_id retornado por POST /api/incidents
+**Path params:** `trace_id` — UUID string, el trace_id retornado por POST /api/incidents
 
 **Response 200:**
 ```json

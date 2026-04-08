@@ -23,7 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from src.config import get_settings
+from ..config import get_settings
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +141,7 @@ class ObservabilityEventModel(Base):
     incident_id = Column(Integer, nullable=True)
     status = Column(String(10), nullable=False)            # 'success' | 'error'
     duration_ms = Column(Integer, nullable=False)
-    event_metadata = Column("metadata", Text, nullable=False)  # JSON; 'metadata' is reserved in SA
+    event_metadata = Column(Text, name="metadata", nullable=False)  # JSON; 'metadata' is reserved in SA
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     def get_metadata(self) -> dict:

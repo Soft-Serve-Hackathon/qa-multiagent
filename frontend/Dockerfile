@@ -1,42 +1,47 @@
-# Dockerfile for Frontend (Vanilla HTML/CSS/JS)
+# Dockerfile for Frontend (Next.js 14)
 # Build: docker build -t qa-multiagent-frontend:latest ./frontend
 # Run: docker run -p 3000:3000 qa-multiagent-frontend:latest
 
-FROM nginx:alpine
+# ── Stage 1: deps ──────────────────────────────────────────────────────────────
+FROM node:20-alpine AS deps
+WORKDIR /app
 
-# Set working directory
-WORKDIR /usr/share/nginx/html
+COPY package.json package-lock.json* ./
+RUN npm ci --prefer-offline
 
-# Copy static files to nginx
-COPY src/static/ ./
-COPY src/js/ ./js/
+# ── Stage 2: builder ───────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+WORKDIR /app
 
-# Copy nginx configuration
-RUN echo 'server { \
-    listen 3000; \
-    server_name localhost; \
-    \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    \
-    location /api/ { \
-        proxy_pass http://backend:8000; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# Internal Docker URL so Next.js rewrites proxy to the backend container
+ARG NEXT_PUBLIC_API_URL=http://backend:8000/api
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-# Expose port
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+RUN npm run build
+
+# ── Stage 3: runner ────────────────────────────────────────────────────────────
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=10s \
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=15s \
     CMD wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.js"]
