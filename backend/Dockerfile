@@ -15,8 +15,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libmagic1 \
+    git \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Clone Medusa.js e-commerce repository (shallow clone for speed)
+RUN git clone --depth 1 https://github.com/medusajs/medusa.git /app/medusa-repo && \
+    cd /app/medusa-repo && \
+    git log -1 --oneline
 
 # Install Python dependencies
 COPY requirements.txt .
