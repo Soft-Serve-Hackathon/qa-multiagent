@@ -2,6 +2,8 @@
 Ticket Agent.
 
 Creates Trello cards based on triage results.
+Implements intelligent deduplication: checks for similar existing tickets before
+creating new ones. If similarity >= 75%, links to the existing ticket instead.
 Persists ticket information and emits observability events.
 Handles Trello API integration with robust error handling.
 """
@@ -9,6 +11,7 @@ Handles Trello API integration with robust error handling.
 import json
 import logging
 import time
+from difflib import SequenceMatcher
 from typing import Any, Optional
 
 import httpx
@@ -38,6 +41,79 @@ SEVERITY_TO_LABEL = {
     Severity.P3.value: "P3-Medium",
     Severity.P4.value: "P4-Low",
 }
+
+# Similarity threshold for deduplication (75% match = duplicate)
+DEDUP_THRESHOLD = 0.75
+# Only compare against tickets from the last N incidents (performance guard)
+DEDUP_LOOKBACK = 20
+
+
+def _string_similarity(a: str, b: str) -> float:
+    """Compute normalized similarity ratio between two strings (0.0–1.0)."""
+    return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
+
+
+class TicketDeduplicator:
+    """
+    Finds existing open tickets that are semantically similar to a new incident.
+
+    Algorithm:
+    - Retrieve last DEDUP_LOOKBACK tickets for the same affected module
+    - Compute weighted similarity: 60% title + 40% description (first 200 chars)
+    - Return the most similar ticket if score >= DEDUP_THRESHOLD, else None
+    """
+
+    def find_similar_ticket(
+        self,
+        incident_title: str,
+        incident_description: str,
+        affected_module: str,
+        threshold: float = DEDUP_THRESHOLD,
+    ) -> Optional[tuple["TicketModel", float]]:
+        """
+        Search for a similar existing open ticket.
+
+        Returns:
+            (TicketModel, similarity_score) if found, else None
+        """
+        with get_db() as db:
+            # Fetch recent tickets for same module (not resolved)
+            candidates = (
+                db.query(TicketModel, IncidentModel, TriageResultModel)
+                .join(IncidentModel, TicketModel.incident_id == IncidentModel.id)
+                .join(TriageResultModel, TriageResultModel.incident_id == IncidentModel.id)
+                .filter(TriageResultModel.affected_module == affected_module)
+                .filter(TicketModel.status != TicketStatus.FAILED.value)
+                .order_by(TicketModel.created_at.desc())
+                .limit(DEDUP_LOOKBACK)
+                .all()
+            )
+
+            best_ticket: Optional[TicketModel] = None
+            best_score: float = 0.0
+
+            for ticket, incident, _ in candidates:
+                title_sim = _string_similarity(incident_title, incident.title)
+                desc_sim = _string_similarity(
+                    incident_description[:200],
+                    incident.description[:200],
+                )
+                combined = (title_sim * 0.6) + (desc_sim * 0.4)
+
+                logger.debug(
+                    f"Dedup check: existing_ticket={ticket.id} "
+                    f"title_sim={title_sim:.2f} desc_sim={desc_sim:.2f} "
+                    f"combined={combined:.2f}"
+                )
+
+                if combined > best_score:
+                    best_score = combined
+                    best_ticket = ticket
+
+        if best_ticket and best_score >= threshold:
+            return best_ticket, best_score
+
+        return None
 
 
 class TicketAgent:
@@ -104,7 +180,62 @@ class TicketAgent:
                 suggested_files = triage_result.get_suggested_files()
                 confidence_score = triage_result.confidence_score
 
-            # ── 2️⃣ Build Trello card name and description ──────────────────
+            # ── 2️⃣ Deduplication check ───────────────────────────────────
+            deduplicator = TicketDeduplicator()
+            dedup_result = deduplicator.find_similar_ticket(
+                incident_title=incident_title,
+                incident_description=incident_description,
+                affected_module=affected_module,
+            )
+
+            if dedup_result is not None:
+                existing_ticket, similarity_score = dedup_result
+                logger.info(
+                    f"[{trace_id}] Duplicate detected: "
+                    f"existing_ticket_id={existing_ticket.id} "
+                    f"similarity={similarity_score:.1%} — skipping new card creation"
+                )
+
+                # Link this incident to the existing ticket
+                with get_db() as db:
+                    incident_model = (
+                        db.query(IncidentModel)
+                        .filter(IncidentModel.id == incident_id)
+                        .first()
+                    )
+                    if incident_model:
+                        incident_model.status = IncidentStatus.DEDUPLICATED.value
+                        incident_model.linked_ticket_id = existing_ticket.id
+                        db.commit()
+
+                duration_ms = int((time.monotonic() - start_time) * 1000)
+                emit_event(
+                    trace_id=trace_id,
+                    stage=ObservabilityStage.TICKET,
+                    status=ObservabilityStatus.DEDUPLICATED,
+                    duration_ms=duration_ms,
+                    incident_id=incident_id,
+                    metadata={
+                        "deduplicated": True,
+                        "existing_ticket_id": existing_ticket.id,
+                        "existing_card_id": existing_ticket.trello_card_id,
+                        "existing_card_url": existing_ticket.trello_card_url,
+                        "similarity_score": round(similarity_score, 3),
+                        "affected_module": affected_module,
+                    },
+                )
+
+                return {
+                    "incident_id": incident_id,
+                    "ticket_id": existing_ticket.id,
+                    "card_id": existing_ticket.trello_card_id,
+                    "card_url": existing_ticket.trello_card_url,
+                    "trace_id": trace_id,
+                    "deduplicated": True,
+                    "similarity_score": similarity_score,
+                }
+
+            # ── 3️⃣ Build Trello card name and description ──────────────────
             card_name = f"[{severity}] {incident_title}"
             card_description = self._build_card_description(
                 incident_description,

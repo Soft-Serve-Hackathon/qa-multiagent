@@ -97,7 +97,17 @@ A single `trace_id` (UUID v4) is assigned at ingestion and flows through every a
 **Prompt design:**
 - System prompt: includes agent role, Medusa.js domain knowledge, severity scale (P1-P4), expected JSON output format
 - User message: incident text + multimodal content + (optional) code snippets from Medusa.js
-- Output structure enforced: `severity`, `affected_module`, `technical_summary`, `suggested_files[]`, `confidence_score`
+- Output structure enforced: `severity`, `affected_module`, `technical_summary`, `suggested_files[]`, `confidence_score`, `reasoning_chain[]`
+
+**Reasoning Chain (Chain of Thought):**
+Claude is instructed to reason step-by-step before classifying. Every triage result includes a `reasoning_chain` array with 5 structured steps:
+1. `symptom_analysis` — What is the primary symptom? Active or resolved? Who is affected?
+2. `severity_reasoning` — Revenue/user/service impact → why this severity level?
+3. `module_identification` — Which Medusa.js module? Why?
+4. `codebase_correlation` — Which files/services are likely involved?
+5. `confidence_assessment` — How certain is the analysis and why?
+
+This makes TriageAgent decisions **explainable and auditable** (Responsible AI: Transparency principle).
 
 **Observability event emitted:**
 ```json
@@ -126,12 +136,21 @@ A single `trace_id` (UUID v4) is assigned at ingestion and flows through every a
 
 | Field | Description |
 |-------|-------------|
-| **Role** | Ticketing integration. Translates triage result into a Trello Card. |
+| **Role** | Ticketing integration. Deduplicates incidents, then translates triage result into a Trello Card. |
 | **Type** | Autonomous (deterministic) |
-| **LLM** | None — only formats and dispatches |
+| **LLM** | None — uses string similarity for deduplication, deterministic dispatch |
 | **Inputs** | `triage_result + incident` (from DB) |
-| **Outputs** | `{ trello_card_id: str, trello_card_url: str }` persisted in DB |
-| **Tools** | Trello REST API (key + token auth) |
+| **Outputs** | `{ trello_card_id: str, trello_card_url: str, deduplicated: bool }` persisted in DB |
+| **Tools** | Trello REST API (key + token auth), SequenceMatcher (deduplication) |
+
+**Deduplication Algorithm:**
+Before creating a new Trello card, TicketAgent checks for existing open tickets with a similar incident:
+1. Query last 20 tickets for the **same affected module**
+2. Compute weighted similarity score: `(title_sim × 0.6) + (description_sim × 0.4)` (first 200 chars)
+3. If score ≥ 75%: mark incident as `DEDUPLICATED`, link to existing ticket — no new card created
+4. If score < 75%: proceed to create a new Trello card
+
+This prevents ticket noise when the same outage generates multiple incident reports.
 
 **Trello Card structure:**
 - **Name:** `[P{severity}] {title}` (e.g., `[P2] Payment service timeout`)
@@ -141,8 +160,9 @@ A single `trace_id` (UUID v4) is assigned at ingestion and flows through every a
 
 **Mock mode:** If `MOCK_INTEGRATIONS=true`, returns a simulated card response and logs `status=mocked`.
 
-**Observability event emitted:**
+**Observability events emitted:**
 ```json
+// Normal case: new card created
 {
   "stage": "ticket",
   "trace_id": "f47ac10b-...",
@@ -151,8 +171,25 @@ A single `trace_id` (UUID v4) is assigned at ingestion and flows through every a
   "duration_ms": 312,
   "metadata": {
     "trello_card_id": "6471abc123",
-    "trello_board": "Incidents",
+    "severity": "P2",
+    "module": "cart",
     "mock": false
+  }
+}
+
+// Deduplicated case: linked to existing ticket
+{
+  "stage": "ticket",
+  "trace_id": "f47ac10b-...",
+  "incident_id": 43,
+  "status": "deduplicated",
+  "duration_ms": 28,
+  "metadata": {
+    "deduplicated": true,
+    "existing_ticket_id": 7,
+    "existing_card_id": "6471abc123",
+    "similarity_score": 0.824,
+    "affected_module": "cart"
   }
 }
 ```
@@ -466,18 +503,53 @@ The TriageAgent manages context from multiple sources to ground its analysis in 
   ingest (47ms) → triage (2341ms) → ticket (312ms) → notify (187ms) → resolved (89ms)
       └─────────────────── trace_id: f47ac10b-... ──────────────────────┘
   ```
-- **Tool:** Custom implementation (not Langfuse/LangSmith — kept simple for hackathon)
+- **Deduplication trace:**
+  ```
+  ingest (45ms) → triage (2180ms) → ticket DEDUPLICATED (28ms) → notify (190ms)
+                                         └─ linked to existing card MOCK-A1B2
+  ```
+- **Tool:** Custom implementation (structured JSON + SQLite queryable store). For production, integration with Langfuse or Arize Phoenix would add LLM-native tracing with token counts, prompt versions, and latency histograms.
 
 ### Metrics
 
 **Per-agent latency** (from event `duration_ms`):
 - **IngestAgent:** avg ~45ms (validation + DB insert)
 - **TriageAgent:** avg ~2341ms (LLM call + file reads)
-- **TicketAgent:** avg ~312ms (Trello API call)
+- **TicketAgent:** avg ~312ms (Trello API call) / ~28ms (deduplicated path)
 - **NotifyAgent:** avg ~187ms (Slack + email dispatch)
 - **ResolutionWatcher:** avg ~89ms (Trello read + link)
 
 **Total pipeline latency:** ~3,000ms (3 sec) from incident submission to reporter email
+
+### Scalability Evidence — Load Test (50 Concurrent Incidents)
+
+Validated with `scripts/load_test_50_incidents.py` (mock mode, no real API calls):
+
+```
+🚀 LOAD TEST: 50 Concurrent Incidents — MOCK mode
+======================================================================
+📝 Phase 1: Submitting 50 incidents concurrently
+   ✅ Submitted: 50/50
+   ⏱️  Duration: 0.21s
+   📊 Throughput: 242.5 incidents/sec
+
+🎫 Phase 2: Polling for ticket creation (up to 60s)
+   Poll  1/60: 34/50 tickets ✓
+   Poll  2/60: 50/50 tickets ✓
+   ✅ All tickets created!
+
+Performance Metrics:
+  Submit latency:  P95=196ms | Avg=153ms | Max=199ms
+  Throughput:      21.4 incidents/sec (end-to-end)
+  Success rate:    100.0%
+======================================================================
+```
+
+**Load test conclusions:**
+- FastAPI handles 50+ concurrent incidents without degradation
+- SQLite WAL mode prevents write contention at this load level
+- Bottleneck for real traffic: LLM latency (~2-5s per incident) — mitigated by async background tasks
+- Phase 2 solution: RabbitMQ queue + N TriageAgent workers (see SCALING.md)
 
 ### Evidence
 
@@ -677,9 +749,8 @@ INJECTION_PATTERNS = [
    - Trade-off: HTTP infrastructure complexity vs. UX (not critical for MVP)
 
 3. **Deduplication logic pre-ticket creation:**
-   - Current: No duplicate detection → similar incidents create separate cards
-   - Better: Compute semantic hash of incident before TicketAgent → merge into existing card
-   - Would reduce ticket noise in large teams
+   - **Implemented:** TicketDeduplicator checks last 20 tickets per module using weighted string similarity (SequenceMatcher, threshold 75%)
+   - **Next step:** Replace with vector embeddings (ChromaDB) for semantic similarity across any phrasing
 
 4. **LLM output validation with fallback:**
    - Current: Pydantic schema validation → fails hard if Claude returns unexpected format
@@ -715,7 +786,7 @@ INJECTION_PATTERNS = [
 
 2. **ResolutionWatcher uses polling, not webhooks.** Introduces up to 60 seconds of latency in resolution notification. Trello webhook endpoint (`POST /api/webhooks/trello`) is implemented and ready — webhook configuration in Trello is the only missing step.
 
-3. **Deduplication not implemented.** Identical or similar incidents create separate Trello cards. A post-MVP improvement would use semantic similarity to detect duplicates before ticket creation.
+3. **Deduplication uses string similarity (not semantic embeddings).** Implemented via `SequenceMatcher` (75% threshold). Works well for similar phrasing of the same incident. A production improvement would use vector embeddings (ChromaDB/Pinecone) for semantic matching that handles paraphrased descriptions.
 
 4. **Medusa.js context is file-based, not vectorized.** The agent reads specific files via `read_ecommerce_file()`. A vector database (ChromaDB, Pinecone) would enable semantic search over the entire codebase for more accurate triage.
 

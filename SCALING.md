@@ -25,17 +25,22 @@ The MVP runs as a single Docker container with FastAPI, SQLite, and a background
 **Bottleneck at:** ~1,000 concurrent writes  
 **Phase 2 solution:** PostgreSQL. The SQLAlchemy ORM is already configured with `DATABASE_URL` env var. Migration requires only changing the connection string — no code changes.
 
-### 3. ResolutionWatcher polling
+### 3. Incident Deduplication
+**Current:** TicketAgent uses `SequenceMatcher` (string similarity) to detect duplicate incidents within the same module (threshold: 75%). Works well for exact or near-exact phrasings of the same outage.  
+**Limitation at:** High paraphrase variance — "DB pool full" vs "database connection queue exhausted" may score below threshold despite describing the same issue.  
+**Phase 2 solution:** Semantic similarity using vector embeddings (ChromaDB or Pinecone). Embed incident title+description on ingestion, query top-K similar vectors before TicketAgent runs. Handles semantic equivalence regardless of wording.
+
+### 4. ResolutionWatcher polling
 **Current:** Background thread polls Trello every 60 seconds.  
 **Bottleneck at:** Latency (up to 60s) and Trello API rate limits at high volume  
 **Phase 2 solution:** Trello Webhooks. The endpoint `POST /api/webhooks/trello` is already implemented. Only Trello webhook configuration is needed — zero code changes.
 
-### 4. Single NotifyAgent instance
+### 5. Single NotifyAgent instance
 **Current:** Single thread sends all Slack and email notifications.  
 **Bottleneck at:** ~20 notifications/minute (SendGrid rate limits)  
 **Phase 2 solution:** NotifyAgent as a separate worker consuming from a notifications queue. N workers in parallel, each handling one channel.
 
-### 5. Medusa.js file-based context
+### 6. Medusa.js file-based context
 **Current:** TriageAgent reads specific files from the mounted Medusa.js repo.  
 **Bottleneck at:** Latency per tool call, inaccuracy on ambiguous modules  
 **Phase 2 solution:** ChromaDB (or similar) vector store with embeddings of the Medusa.js codebase. Semantic search returns the top-K most relevant code snippets in one fast query.

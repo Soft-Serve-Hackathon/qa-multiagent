@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # System prompt for Claude as SRE triage specialist
 TRIAGE_SYSTEM_PROMPT = """You are a SRE (Site Reliability Engineer) incident triage specialist for a Medusa.js e-commerce platform.
-Your job is to analyze incident reports and provide structured triage results.
+Your job is to analyze incident reports and provide structured triage results WITH explicit reasoning.
 
 **Severity Scale:**
 - P1: Critical — Platform down, revenue impact, immediate action required (< 1 hour response)
@@ -39,14 +39,22 @@ Your job is to analyze incident reports and provide structured triage results.
 
 **Your response MUST be valid JSON exactly matching this structure:**
 {
+    "reasoning_chain": [
+        {"step": "symptom_analysis", "analysis": "What is the primary symptom? Active or resolved? User scope?"},
+        {"step": "severity_reasoning", "analysis": "Revenue impact + user impact + service impact → why this severity?", "selected_severity": "P2"},
+        {"step": "module_identification", "analysis": "Which module is affected and why?", "identified_module": "cart"},
+        {"step": "codebase_correlation", "analysis": "Which files/services in Medusa.js are likely involved?"},
+        {"step": "confidence_assessment", "analysis": "How confident are you and why?", "confidence_score": 0.85}
+    ],
     "severity": "P1" | "P2" | "P3" | "P4",
     "affected_module": "cart" | "order" | "payment" | "inventory" | "product" | "customer" | "shipping" | "discount" | "unknown",
-    "technical_summary": "2-3 sentence summary of the root cause and impact",
+    "technical_summary": "2-3 sentence summary of the root cause and impact, referencing your reasoning",
     "suggested_files": ["path/to/file1.ts", "path/to/file2.ts"],
     "confidence_score": <float between 0.0 and 1.0>
 }
 
 **Important Guidelines:**
+- reasoning_chain is REQUIRED — show your work step by step before concluding
 - Do NOT include reporter email in your response
 - Use the read_ecommerce_file tool if you need to understand the codebase structure
 - Be precise about file paths — they must exist and be realistic for the module
@@ -208,12 +216,17 @@ class AnthropicLLMClient:
         """
         Extract and parse JSON from Claude's text response.
         Handles markdown code blocks and validates structure.
+        Preserves reasoning_chain if present.
         """
+        REQUIRED = ["severity", "affected_module", "technical_summary", "suggested_files", "confidence_score"]
+
+        def _valid(r: dict) -> bool:
+            return all(k in r for k in REQUIRED)
+
         try:
             # Try direct JSON parse first
             result = json.loads(text)
-            # Validate required fields
-            if all(k in result for k in ["severity", "affected_module", "technical_summary", "suggested_files", "confidence_score"]):
+            if _valid(result):
                 return result
         except json.JSONDecodeError:
             pass
@@ -223,7 +236,7 @@ class AnthropicLLMClient:
         if json_match:
             try:
                 result = json.loads(json_match.group(1))
-                if all(k in result for k in ["severity", "affected_module", "technical_summary", "suggested_files", "confidence_score"]):
+                if _valid(result):
                     return result
             except json.JSONDecodeError:
                 pass
@@ -233,7 +246,7 @@ class AnthropicLLMClient:
         if json_match:
             try:
                 result = json.loads(json_match.group())
-                if all(k in result for k in ["severity", "affected_module", "technical_summary", "suggested_files", "confidence_score"]):
+                if _valid(result):
                     return result
             except json.JSONDecodeError:
                 pass
