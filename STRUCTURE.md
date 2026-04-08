@@ -60,22 +60,30 @@ project-root/
 │   ├── .env.example                  # Backend environment template
 │   └── .dockerignore                 # Docker build optimization
 │
-├── frontend/                          # Vanilla HTML/CSS/JS (Nginx + Reverse Proxy)
-│   ├── src/
-│   │   ├── static/
-│   │   │   ├── index.html            # Form UI + dashboard
-│   │   │   │   ├── Title + description fields
-│   │   │   │   ├── Reporter email + file upload
-│   │   │   │   └── State machine UI (idle/loading/success/error-*)
-│   │   │   ├── style.css             # Responsive styling (cards, forms, alerts)
-│   │   │   └── favicon.ico           # App icon
-│   │   ├── js/                       # Vanilla JavaScript (no frameworks)
-│   │   │   ├── app.js                # Main app orchestration + state router
-│   │   │   ├── form-handler.js       # Form validation + POST /api/incidents
-│   │   │   └── status-tracker.js     # polling loop (trace_id display, real-time updates)
-│   │   └── assets/                   # Images, fonts
-│   ├── Dockerfile                    # Nginx reverse proxy + static files
-│   └── .dockerignore
+├── frontend/                          # Next.js Frontend (TypeScript + Tailwind CSS)
+│   ├── app/                          # Next.js App Router
+│   │   ├── page.tsx                  # Home page (state machine: form → tracking → error)
+│   │   ├── layout.tsx                # Root layout with metadata
+│   │   ├── globals.css               # Global Tailwind styles + custom utilities
+│   │   └── components/
+│   │       ├── IncidentForm.tsx      # Form component (validation, FormData, POST)
+│   │       ├── StatusTracker.tsx     # Status polling (5s interval, timeline visualization)
+│   │       └── ui/
+│   │           └── FormInput.tsx     # Reusable input component
+│   ├── lib/
+│   │   └── api.ts                    # Axios client (submitIncident, getIncidentStatus)
+│   ├── public/
+│   │   └── favicon.ico               # App icon
+│   ├── package.json                  # Node dependencies (Next.js, React, Tailwind, Axios)
+│   ├── tsconfig.json                 # TypeScript configuration
+│   ├── tailwind.config.js            # Tailwind CSS theme
+│   ├── postcss.config.js             # PostCSS setup
+│   ├── next.config.js                # Next.js config (rewrites for API proxy)
+│   ├── .eslintrc.json                # ESLint rules
+│   ├── Dockerfile                    # Multi-stage Node build + Next.js standalone
+│   ├── README.md                     # Frontend documentation
+│   ├── .gitignore                    # Node-specific ignores
+│   └── .env.example                  # Environment variables template
 │
 ├── docker-compose.yml                # Service orchestration (backend + frontend)
 │                                      # Ports: backend on 8000, frontend on 3000
@@ -145,19 +153,20 @@ Backend follows **Clean Architecture** with 5 concentric rings:
    - Cmd: `python -m uvicorn src.main:app --host 0.0.0.0 --port 8000`
 
 2. **Frontend** (`frontend/Dockerfile`)
-   - Base: `nginx:alpine`
+   - Base: `node:20-alpine`
    - Exposes: port 3000
-   - Health check: `wget --spider http://localhost:3000`
-   - Config: Nginx reverse proxy for API calls to backend
+   - Health check: `node -e "require('http').get(...)"`
+   - Cmd: `node server.js` (Next.js standalone server)
 
 ### Service Communication
 
 ```
 User Browser
     │
-    ├─→ Frontend (nginx:3000)
+    ├─→ Frontend (Next.js:3000)
     │        │
-    │        └─→ API Proxy (http://backend:8000/api/*)
+    │        ├─→ React components (IncidentForm, StatusTracker)
+    │        └─→ API Client (axios) → http://backend:8000/api/*
     │
     └─→ Backend (fastapi:8000) ←─ Internal network only
          │
