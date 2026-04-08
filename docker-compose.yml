@@ -1,0 +1,50 @@
+version: '3.9'
+
+services:
+  # FastAPI application
+  app:
+    build: .
+    container_name: qa-multiagent-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    environment:
+      - DATABASE_URL=sqlite:///./data/incidents.db
+      - DEBUG=false
+      - LOG_LEVEL=info
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    depends_on:
+      - db  # Optional: for future PostgreSQL migration
+    networks:
+      - qa-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # SQLite database container (optional, for future PostgreSQL)
+  db:
+    image: sqlite:latest
+    container_name: qa-multiagent-db
+    volumes:
+      - ./data:/data
+    networks:
+      - qa-network
+    profiles: ["postgres"]  # Activate with: docker-compose --profile postgres up
+
+networks:
+  qa-network:
+    driver: bridge
+
+volumes:
+  data:
+  logs:
+  uploads:
