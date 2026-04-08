@@ -33,19 +33,29 @@
 │       ├── unit/
 │       └── integration/
 │
-├── frontend/                         # Vanilla HTML/CSS/JS (Nginx)
-│   ├── src/
-│   │   ├── static/
-│   │   │   ├── index.html           # Form & dashboard UI
-│   │   │   ├── style.css            # Styling
-│   │   │   └── favicon.ico
-│   │   ├── js/
-│   │   │   ├── app.js               # Main orchestration
-│   │   │   ├── form-handler.js      # Form submission & validation
-│   │   │   └── status-tracker.js    # Real-time polling
-│   │   └── assets/                  # Images & fonts
-│   ├── Dockerfile                   # Frontend container image (Nginx)
-│   └── .dockerignore
+├── frontend/                         # Next.js Frontend (TypeScript + Tailwind)
+│   ├── app/                         # App Router (Next.js 14)
+│   │   ├── layout.tsx               # Root layout
+│   │   ├── page.tsx                 # Home page
+│   │   ├── globals.css              # Global Tailwind styles
+│   │   └── components/
+│   │       ├── IncidentForm.tsx     # Form component
+│   │       ├── StatusTracker.tsx    # Status polling component
+│   │       └── ui/
+│   │           └── FormInput.tsx
+│   ├── lib/
+│   │   └── api.ts                   # Centralized API client
+│   ├── public/
+│   │   └── favicon.ico              # App icon
+│   ├── package.json                 # Node dependencies
+│   ├── tsconfig.json                # TypeScript config
+│   ├── tailwind.config.js           # Tailwind CSS config
+│   ├── next.config.js               # Next.js config
+│   ├── .eslintrc.json               # ESLint config
+│   ├── Dockerfile                   # Frontend container image (Node)
+│   ├── README.md                    # Frontend documentation
+│   ├── .gitignore                   # Frontend .gitignore
+│   └── .env.example                 # Frontend environment template
 │
 ├── docker-compose.yml               # Service orchestration
 ├── .env.example                     # Root environment template
@@ -165,11 +175,13 @@ Access:
 3. Add route in `backend/src/api/routes.py`
 4. Add tests in `backend/tests/`
 
-### New Frontend Page
+#### New Frontend Component
 
-1. Create component in `frontend/src/js/`
-2. Add HTML in `frontend/src/static/index.html`
-3. Style in `frontend/src/static/style.css`
+1. Create component in `app/components/`
+2. Use TypeScript for type safety
+3. Style with Tailwind CSS utility classes
+4. Import API functions from `lib/api.ts`
+5. Add `.tsx` extension (React component)
 
 ## 📝 Conventions
 
