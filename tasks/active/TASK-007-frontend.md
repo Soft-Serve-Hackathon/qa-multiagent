@@ -1,7 +1,7 @@
-# Task: TASK-007 — Frontend (Formulario de reporte de incidentes)
+# Task: TASK-007 — Frontend (Formulario de reporte de incidentes con Next.js)
 
 ## Goal
-Implementar el formulario web HTML para reportar incidentes. Debe ser simple, funcional y demostrable en el video demo.
+Implementar el formulario web React con Next.js 14 para reportar incidentes. Debe ser funcional, type-safe y demostrable en el video demo.
 
 ## Source
 - spec: `docs/specs/mvp/spec.md` (FR1-FR3, AC1)
@@ -9,10 +9,12 @@ Implementar el formulario web HTML para reportar incidentes. Debe ser simple, fu
 - agent: `.claude/agents/frontend-engineer.md` (campos, estados UI, multimodal UX)
 
 ## Scope
-- `src/frontend/index.html`: formulario principal
-- `src/frontend/styles.css`: estilos básicos (sin frameworks CSS pesados)
-- `src/frontend/app.js`: lógica de submit, validación cliente, estados UI
-- FastAPI sirve los archivos estáticos: `app.mount("/", StaticFiles(directory="src/frontend"))`
+- `frontend/app/pages.tsx`: página principal con state machine 
+- `frontend/app/components/IncidentForm.tsx`: componente formulario (validación, FormData, POST)
+- `frontend/app/components/StatusTracker.tsx`: componente polling de estado (5s intervals)
+- `frontend/lib/api.ts`: cliente Axios centralizado
+- `frontend/app/globals.css`: estilos Tailwind CSS
+- Next.js sirve la aplicación en puerto 3000
 
 ## Campos del formulario
 | Campo | Tipo | Validación | Requerido |
@@ -89,65 +91,71 @@ Fields:
 }
 HTTP 500
 ```
-
-## Out of Scope
-- Dashboard de incidentes
-- Página de estado en tiempo real (polling)
-- Login / autenticación
+histórico de incidentes
+- Login / autenticación de usuarios
+- Exportación de reportes
 
 ## Files Likely Affected
-- `src/frontend/index.html` (nuevo)
-- `src/frontend/styles.css` (nuevo)
-- `src/frontend/app.js` (nuevo)
-- `src/main.py` (modificar — agregar mount de StaticFiles)
+- `frontend/app/page.tsx` (React + State machine)
+- `frontend/app/components/IncidentForm.tsx` (componente formulario)
+- `frontend/app/components/StatusTracker.tsx` (componente polling)
+- `frontend/lib/api.ts` (cliente HTTP)
 
 ## Constraints
-- HTML5 + Vanilla JS — sin React, Vue, ni frameworks SPA
-- El formulario usa `fetch()` con `FormData` para el submit
-- Código limpio y legible — los mentores pueden leer el HTML durante la evaluación
-- CSS responsivo para desktop + tablet (mobile no es requerido pero es un plus)
-- Validación cliente-side ANTES de enviar:
+- **Framework**: React 18 con Next.js 14 + TypeScript
+- **Styling**: Tailwind CSS (no CSS-in-JS, no Bootstrap)
+- **HTTP**: Axios con FormData para multipart/form-data
+- **Code Quality**: TypeScript strict mode, proper typing
+- **Validación cliente-side ANTES de enviar**:
   - title: no vacío, max 200 chars
-  - description: no vacío, max 2000 chars, no contiene <guardrail_patterns>
+  - description: no vacío, max 2000 chars
   - reporter_email: validar con regex /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  - attachment (si existe): MIME type en (image/png, image/jpeg, text/plain) + size <10MB
-- Injection detection en cliente: detectar patrones de "ignore previous instructions", "system prompt", etc. → mostrar error-injection sin enviar
-- No guardar credentials, tokens, ni API keys en el formulario
+  - attachment (opcional): MIME types permitidos (image/png, image/jpeg, text/plain, application/json) + size <10MB
+- **Inyección de prompts**: validar patrones en cliente → mostrar error sin enviar POST
+- **No guardar** credentials, tokens, ni API keys en el código
 
 ## Validación de Injection (Cliente)
+Ubicación: `frontend/lib/api.ts` O componente
 Patrones a rechazar (case-insensitive):
-```javascript
+```typescript
 const INJECTION_PATTERNS = [
   /ignore\s+previous/i,
   /system\s+prompt/i,
   /jailbreak/i,
   /you\s+are\s+now/i,
-  /as\s+an\s+ai/i,
-  /forget\s+your\s+instructions/i
 ];
+```
+Si coincide → mostrar error sin
 ```
 Si alguno coincide → estado error-injection, no enviar POST
 
 ## Validation Commands
 ```bash
 # 1. Happy path: texto + imagen
-- Abrir http://localhost:3000
-- Llenar: title="Payment failed", description="..."
-- Adjuntar screenshot PNG
-- Click submit → loading → success con trace_id en pantalla
+- Abrir http://localhost:3000 (Next.js dev mode)
+npm run dev
+# Navegar a http://localhost:3000
+# - Llenar: title="Payment failed", description="..."
+# - Adjuntar screenshot PNG
+# - Click submit → estado loading → success con trace_id visible
 
 # 2. Validación cliente: email inválido
-- Dejar reporter_email vacío o inválido
-- Botón submit debe estar deshabilitado O error al hacer click
+# - Dejar reporter_email vacío o formato inválido (no @)
+# - Error mostrado en UI sin enviar POST
 
 # 3. Validación cliente: archivo muy grande 
-- Adjuntar archivo >10MB
-- Mostrar error "File too large (max 10MB)" sin enviar
+# - Adjuntar archivo >10MB
+# - Error "File size exceeds 10MB limit" sin enviar POST
 
 # 4. Injection detection
-- Escribir "ignore previous instructions" en description
-- Mostrar error-injection inmediatamente (sin POST a /api/incidents)
+# - Escribir "ignore previous instructions" en description
+# - Error "Your report contains content that cannot be processed" sin POST
 
+# Docker validation
+docker-compose build
+docker-compose up
+# Navegar a http://localhost:3000
+# Verificar que todos los tests pasan
 # 5. Multimodal preview
 - Adjuntar imagen PNG/JPG → preview thumbnail visible
 - Adjuntar archivo .log → icono de documento + nombre de archivo visible
@@ -193,14 +201,22 @@ const STATES = {
 };
 ```
 
-## Estructura de archivos esperada
+## Estructura de archivos esperada (Next.js 14)
 ```
-src/frontend/
-├── index.html          # Markup, form fields, estado containers
-├── styles.css          # Responsive, estados visuales (loading spinner, error colors)
-├── app.js              # State machine, validación, fetch(), event handlers
-└── assets/
-    └── spinner.svg     # Spinner para estado loading (16x16 o 24x24)
+frontend/
+├── app/
+│   ├── page.tsx                # Home page con forma + tracker
+│   ├── globals.css             # Tailwind + utilidades
+│   ├── layout.tsx              # Root layout con metadata
+│   └── components/
+│       ├── IncidentForm.tsx     # Validación, FormData, POST
+│       ├── StatusTracker.tsx    # Polling 5s, timeline
+│       └── ui/
+│           └── FormInput.tsx    # Input reutilizable
+├── lib/
+│   └── api.ts                  # Axios client centralizado
+├── package.json                # Dependencies + scripts
+└── Dockerfile                  # Multi-stage Node 20 build
 ```
 
 ## Funcionalidades de Java Script distribuidas por módulo
@@ -275,16 +291,10 @@ if (file.size > MAX_FILE_SIZE) {
 
 
 ## Risks
-- **FastAPI StaticFiles conflicto con API routes:** Si las rutas no están bien ordenadas, GET / puede resolver a /api/incidents. Mitigación: registrar endpoints `/api/*` ANTES de montear StaticFiles en main.py. Ejemplo:
-  ```python
-  @app.post("/api/incidents")
-  async def create_incident(...): ...
-  
-  app.mount("/", StaticFiles(directory="src/frontend", html=True))
-  ```
-- **CORS issues:** Frontend en localhost:3000 + API en mismo host no debe tener problemas, pero si separados, CORS headers necesarios.
-- **FormData boundary encoding:** En algunos navegadores viejos, FormData puede tener problemas con archivos binarios. Mitigación: testear en Chrome 90+ (no es relevante para MVP).
+- **Frontend separado en puerto 3000:** Con Next.js corriendo en `docker-compose.yml`, el frontend en localhost:3000 hace requests a backend en localhost:8000. Mitigación: `next.config.js` configura rewrites para `/api/*` → backend, evitando CORS en desarrollo.
+- **CORS en producción:** Si frontend y backend están en dominios diferentes, backend debe tener `CORSMiddleware` configurado. 
 - **Validación de MIME type side-by-side con backend:** El backend debe validar también (no confiar solo en client-side). Frontend es primera línea de defensa por UX.
+- **Next.js build en Docker:** Asegurar que `next build` completa antes de `next start` en multi-stage Dockerfile.
 - **Inyección de JavaScript en error messages:** Si Backend devuelve error con input del usuario (ej. `/api/incidents?title=<script>alert(1)</script>`), puede ejecutarse. Mitigación: sanitizar con `textContent` en lugar de `innerHTML`.
 
 ## Handoff
