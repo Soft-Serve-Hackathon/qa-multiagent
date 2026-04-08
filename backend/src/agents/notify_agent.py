@@ -10,6 +10,7 @@ Handles failures gracefully (partial success = partial notification).
 import json
 import logging
 import time
+from datetime import datetime
 from typing import Any, Optional
 
 import httpx
@@ -579,3 +580,199 @@ class NotifyAgent:
             )
         except Exception as exc:
             logger.warning(f"Failed to emit error event: {exc}")
+
+    def send_resolution_email(
+        self,
+        incident_id: int,
+        trace_id: str,
+        ticket_url: str,
+        reporter_email: str,
+    ) -> dict[str, Any]:
+        """
+        Send resolution notification email to reporter.
+
+        Called by ResolutionWatcher when a ticket is marked as resolved.
+
+        Args:
+            incident_id: ID of incident
+            trace_id: Trace ID for observability
+            ticket_url: URL of the Trello card (for reference)
+            reporter_email: Email address of the reporter
+
+        Returns:
+            Dictionary with {"status": "sent" | "failed", "error": "..."}
+        """
+        try:
+            if self.mock_email:
+                logger.info(
+                    f"[{trace_id}] [MOCK] Resolution email to {reporter_email}"
+                )
+                self._log_notification(
+                    incident_id=incident_id,
+                    channel=NotificationChannel.EMAIL.value,
+                    recipient=reporter_email,
+                    notification_type=NotificationType.REPORTER_RESOLUTION.value,
+                    content_summary="Incident resolved",
+                    status=NotificationStatus.MOCKED.value,
+                )
+                return {"status": "sent"}
+
+            if self.mock_integrations:
+                logger.info(
+                    f"[{trace_id}] [MOCK] Resolution email to {reporter_email}"
+                )
+                self._log_notification(
+                    incident_id=incident_id,
+                    channel=NotificationChannel.EMAIL.value,
+                    recipient=reporter_email,
+                    notification_type=NotificationType.REPORTER_RESOLUTION.value,
+                    content_summary="Incident resolved",
+                    status=NotificationStatus.MOCKED.value,
+                )
+                return {"status": "sent"}
+
+            if not self.sendgrid_api_key:
+                logger.warning(f"[{trace_id}] SendGrid API key not configured")
+                self._log_notification(
+                    incident_id=incident_id,
+                    channel=NotificationChannel.EMAIL.value,
+                    recipient=reporter_email,
+                    notification_type=NotificationType.REPORTER_RESOLUTION.value,
+                    content_summary="Incident resolved",
+                    status=NotificationStatus.FAILED.value,
+                    error_message="SendGrid not configured",
+                )
+                return {"status": "failed", "error": "sendgrid_not_configured"}
+
+            # Build resolution email HTML
+            html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background-color: #4CAF50; padding: 20px; border-radius: 8px; margin-bottom: 20px; color: white; }}
+        .header h1 {{ margin: 0; font-size: 24px; }}
+        .section {{ margin: 20px 0; }}
+        .section-title {{ font-weight: bold; font-size: 14px; color: #333; margin-bottom: 10px; }}
+        .value {{ color: #666; padding: 10px; background-color: #f9f9f9; border-left: 4px solid #4CAF50; }}
+        .button {{ display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px; margin-top: 10px; }}
+        .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #999; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✅ Incident Resolved</h1>
+            <p>Your incident report has been resolved.</p>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Good News!</div>
+            <div class="value">
+                The incident you reported has been resolved by the SRE team.
+                The ticket has been moved to the Done column in our tracking system.
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Details</div>
+            <div class="value">
+                <strong>Trace ID:</strong> <code>{trace_id}</code><br/>
+                <strong>Resolution Time:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}
+            </div>
+        </div>
+
+        <div class="section">
+            <a href="{ticket_url}" class="button">View Resolution Details</a>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Next Steps</div>
+            <div class="value">
+                If you notice any issues related to this incident please open a new report.
+                Thank you for helping us maintain system reliability.
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>This is an automated message from the SRE triage system. Do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+            # SendGrid API request
+            url = "https://api.sendgrid.com/v3/mail/send"
+            headers = {
+                "Authorization": f"Bearer {self.sendgrid_api_key}",
+                "Content-Type": "application/json",
+            }
+
+            payload = {
+                "personalizations": [
+                    {
+                        "to": [{"email": reporter_email}],
+                        "subject": f"✅ Incident Resolved - Trace {trace_id[:8]}",
+                    }
+                ],
+                "from": {"email": self.reporter_email_from},
+                "content": [
+                    {
+                        "type": "text/html",
+                        "value": html_content,
+                    }
+                ],
+            }
+
+            logger.info(
+                f"[{trace_id}] Sending resolution email to {reporter_email}"
+            )
+
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(url, json=payload, headers=headers)
+
+            if response.status_code not in (200, 201, 202):
+                logger.error(
+                    f"[{trace_id}] SendGrid error ({response.status_code}): "
+                    f"{response.text[:200]}"
+                )
+                self._log_notification(
+                    incident_id=incident_id,
+                    channel=NotificationChannel.EMAIL.value,
+                    recipient=reporter_email,
+                    notification_type=NotificationType.REPORTER_RESOLUTION.value,
+                    content_summary="Incident resolved",
+                    status=NotificationStatus.FAILED.value,
+                    error_message=response.text[:500],
+                )
+                return {"status": "failed", "error": response.text[:200]}
+
+            logger.info(
+                f"[{trace_id}] Resolution email sent successfully to {reporter_email}"
+            )
+            self._log_notification(
+                incident_id=incident_id,
+                channel=NotificationChannel.EMAIL.value,
+                recipient=reporter_email,
+                notification_type=NotificationType.REPORTER_RESOLUTION.value,
+                content_summary="Incident resolved",
+                status=NotificationStatus.SENT.value,
+            )
+            return {"status": "sent"}
+
+        except Exception as exc:
+            logger.exception(f"[{trace_id}] Resolution email failed: {exc}")
+            self._log_notification(
+                incident_id=incident_id,
+                channel=NotificationChannel.EMAIL.value,
+                recipient=reporter_email,
+                notification_type=NotificationType.REPORTER_RESOLUTION.value,
+                content_summary="Incident resolved",
+                status=NotificationStatus.FAILED.value,
+                error_message=str(exc)[:500],
+            )
+            return {"status": "failed", "error": str(exc)}

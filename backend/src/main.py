@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .agents.resolution_watcher import ResolutionWatcher
 from .api.routes import router
 from .config import get_settings
 from .infrastructure.database import create_tables
@@ -23,14 +24,24 @@ logger = logging.getLogger(__name__)
 
 _start_time = time.time()
 
+# Initialize ResolutionWatcher for background polling
+resolution_watcher = ResolutionWatcher()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     create_tables()
     logger.info("Database tables ready")
+
+    await resolution_watcher.start()
+    logger.info("ResolutionWatcher started")
+
     yield
-    # Shutdown (nothing to clean up for SQLite)
+
+    # Shutdown
+    await resolution_watcher.stop()
+    logger.info("ResolutionWatcher stopped")
 
 
 app = FastAPI(
