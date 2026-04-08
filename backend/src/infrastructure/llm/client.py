@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 from anthropic import Anthropic
 
-from src.infrastructure.llm.tools import ToolRegistry
+from .tools import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
