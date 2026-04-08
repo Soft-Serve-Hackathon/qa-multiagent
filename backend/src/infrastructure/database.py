@@ -81,6 +81,7 @@ class IncidentModel(Base):
     attachment_type = Column(String(10), nullable=True)   # 'image' | 'log' | null
     attachment_path = Column(String(500), nullable=True)
     status = Column(String(20), nullable=False, default="received")
+    linked_ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=True)  # Set when deduplicated
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

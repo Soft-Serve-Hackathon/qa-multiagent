@@ -10,6 +10,7 @@ from enum import Enum
 class IncidentStatus(str, Enum):
     RECEIVED = "received"
     TRIAGING = "triaging"
+    DEDUPLICATED = "deduplicated"  # Linked to existing ticket, no new card created
     TICKETED = "ticketed"
     NOTIFIED = "notified"
     RESOLVED = "resolved"
@@ -73,3 +74,4 @@ class ObservabilityStage(str, Enum):
 class ObservabilityStatus(str, Enum):
     SUCCESS = "success"
     ERROR = "error"
+    DEDUPLICATED = "deduplicated"  # Ticket skipped — linked to existing
