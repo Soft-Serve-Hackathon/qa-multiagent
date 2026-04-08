@@ -1,196 +1,185 @@
-# System Overview — QA Multiagente
+# System Overview — SRE Incident Intake & Triage Agent
 
-**Versión:** 0.1  
-**Fecha:** 2026-04-08  
-**Estado:** Draft
-
----
-
-## Visión general
-
-El sistema es una plataforma de QA automatizado que orquesta agentes IA especializados a lo largo del ciclo de vida de un Pull Request. GitHub Actions actúa como runtime de orquestación: dispara los agentes en respuesta a eventos del repositorio, y los agentes interactúan con GitHub API, modelos IA y herramientas de gestión de tickets.
-
-```
-GitHub (PR event)
-       │
-       ▼
-┌─────────────────────────────────────────────────────┐
-│                  GitHub Actions                      │
-│  Workflow: pr-review.yml   Workflow: qa-trigger.yml  │
-└────────────┬───────────────────────┬────────────────┘
-             │                       │ (post-aprobación manual)
-             ▼                       ▼
-     ┌───────────────┐      ┌─────────────────────┐
-     │  PR Reviewer  │      │      QA Agent        │
-     │   (Claude)    │      │  ┌───────────────┐   │
-     └───────┬───────┘      │  │ Code Analyzer │   │
-             │              │  │ (Claude)      │   │
-             │ comentario   │  └───────┬───────┘   │
-             ▼              │          │            │
-         GitHub PR          │  ┌───────▼───────┐   │
-                            │  │ Regression    │   │
-                            │  │ Analyzer      │   │
-                            │  └───────┬───────┘   │
-                            └──────────┼────────────┘
-                                       │ findings[]
-                          ┌────────────┴────────────┐
-                          │                         │
-                          ▼                         ▼
-               ┌──────────────────┐    ┌─────────────────────┐
-               │ Technical        │    │ Business Reporter    │
-               │ Reporter         │    │ (GPT-4o / OpenAI)   │
-               │ (Claude)         │    └──────────┬──────────┘
-               └────────┬─────────┘               │
-                        │  technical_report        │ business_report
-                        └───────────┬─────────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────┐
-                         │  Ticket Creator  │
-                         │  (Jira Adapter)  │
-                         └────────┬─────────┘
-                                  │ ticket creado
-                                  ▼
-                         ┌──────────────────┐
-                         │ Solution Proposer│
-                         │ (Claude)         │
-                         └────────┬─────────┘
-                                  │ comentario en ticket Jira
-                                  ▼
-                               Jira ticket
-                               (completo)
-```
-
-**Flujo B alternativo:**
-```
-Google Forms / Notion (webhook)
-       │
-       ▼
-Bug Report Ingestion → QA Agent (desde findings) → mismo pipeline
-```
+**Version:** 1.0  
+**Owner:** Architect  
+**Last updated:** 2026-04-08
 
 ---
 
-## Módulos del sistema
+## Descripción del sistema
 
-### Módulo 1 — PR Reviewer
-| Atributo | Valor |
-|---|---|
-| Trigger | `pull_request: [opened, reopened, synchronize]` |
-| Input | diff del PR, metadatos (título, autor, rama) |
-| Modelo | Claude (Anthropic API) |
-| Output | Comentario markdown en el PR: resumen, riesgos, recomendaciones |
-| Archivos | `src/agents/pr_reviewer.py`, `src/prompts/pr_review_prompt.py` |
-
-### Módulo 2 — QA Agent
-| Atributo | Valor |
-|---|---|
-| Trigger | PR aprobado (gate manual) |
-| Input | diff del PR + archivos del repositorio (para análisis de impacto) |
-| Modelo | Claude (Anthropic API) |
-| Output | `findings[]` — lista de hallazgos con severidad, archivo, función, descripción |
-| Archivos | `src/agents/qa_agent.py`, `src/agents/regression_analyzer.py` |
-
-### Módulo 3 — Generación de Reportes Dual
-| Atributo | Valor |
-|---|---|
-| Trigger | `findings[]` disponibles |
-| Input | Lista de hallazgos del QA Agent |
-| Modelos | Claude (reporte técnico) + GPT-4o (reporte de negocio) |
-| Output | `TechnicalReport` + `BusinessReport` siguiendo esquema común |
-| Archivos | `src/agents/technical_reporter.py`, `src/agents/business_reporter.py` |
-| Ejecución | Paralela — ambos agentes corren simultáneamente |
-
-### Módulo 4 — Ticket Creator
-| Atributo | Valor |
-|---|---|
-| Trigger | Ambos reportes disponibles |
-| Input | `TechnicalReport` + `BusinessReport` + metadatos del PR |
-| Integración | Jira API (via `JiraAdapter`) |
-| Output | Ticket creado en Jira con ambas perspectivas |
-| Archivos | `src/adapters/ticket_provider.py`, `src/adapters/jira_adapter.py` |
-
-### Módulo 5 — Solution Proposer
-| Atributo | Valor |
-|---|---|
-| Trigger | Ticket creado en Jira |
-| Input | Hallazgos del QA Agent + diff del PR |
-| Modelo | Claude (Anthropic API) |
-| Output | Propuesta de solución técnica como comentario del ticket en Jira |
-| Archivos | `src/agents/solution_proposer.py` |
+Pipeline de 5 agentes especializados que procesan un reporte de incidente de extremo a extremo. Cada agente tiene una responsabilidad única y no solapada. El sistema es stateless entre agentes — el estado compartido vive en la base de datos SQLite.
 
 ---
 
-## Estructura de carpetas del proyecto
+## Diagrama de componentes
 
 ```
-qa-multiagent/
-├── .github/
-│   └── workflows/
-│       ├── pr-review.yml          # Trigger: PR abierto → PR Reviewer
-│       └── qa-trigger.yml         # Trigger: PR aprobado → QA pipeline
-├── src/
-│   ├── agents/
-│   │   ├── pr_reviewer.py         # Módulo 1
-│   │   ├── qa_agent.py            # Módulo 2 — análisis de código
-│   │   ├── regression_analyzer.py # Módulo 2 — análisis de impacto
-│   │   ├── technical_reporter.py  # Módulo 3 — reporte técnico
-│   │   ├── business_reporter.py   # Módulo 3 — reporte de negocio
-│   │   └── solution_proposer.py   # Módulo 5
-│   ├── clients/
-│   │   ├── github_client.py       # GitHub API (diff, comentarios, reviews)
-│   │   ├── claude_client.py       # Anthropic API
-│   │   └── openai_client.py       # OpenAI API (GPT-4o)
-│   ├── adapters/
-│   │   ├── ticket_provider.py     # Interfaz abstracta
-│   │   └── jira_adapter.py        # Implementación Jira
-│   ├── models/
-│   │   ├── finding.py             # Hallazgo individual del QA Agent
-│   │   ├── report.py              # Esquema común de reporte (técnico + negocio)
-│   │   ├── ticket.py              # Modelo de ticket independiente del proveedor
-│   │   └── bug_report.py          # Modelo del formulario de bugs (Flujo B)
-│   ├── prompts/
-│   │   ├── pr_review_prompt.py
-│   │   ├── qa_analysis_prompt.py
-│   │   ├── regression_prompt.py
-│   │   ├── technical_report_prompt.py
-│   │   ├── business_report_prompt.py
-│   │   └── solution_prompt.py
-│   └── entrypoints/
-│       ├── pr_review.py           # Llamado por pr-review.yml
-│       ├── qa_trigger.py          # Llamado por qa-trigger.yml
-│       └── bug_report_ingestion.py # Webhook del formulario externo (Flujo B)
-├── tests/
-│   ├── agents/
-│   ├── clients/
-│   ├── adapters/
-│   └── entrypoints/
-├── docs/
-├── tasks/
-├── .env.example                   # Variables de entorno requeridas
-└── requirements.txt
+┌─────────────────────────────────────────────────────────┐
+│                     Web UI (HTML + JS)                   │
+│         Formulario: título + descripción + adjunto       │
+└──────────────────────────┬──────────────────────────────┘
+                           │ POST /api/incidents
+                           │ (multipart/form-data)
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                    IngestAgent                           │
+│  • Detecta prompt injection (guardrails)                 │
+│  • Valida MIME type del adjunto                          │
+│  • Asigna trace_id único (UUID v4)                       │
+│  • Persiste Incident en SQLite                           │
+│  • Emite log: stage=ingest                               │
+└──────────────────────────┬──────────────────────────────┘
+                           │ incident_id + trace_id
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                    TriageAgent                           │
+│  • Único agente que llama al LLM                         │
+│  • Claude claude-sonnet-4-6 (multimodal)                 │
+│  • Imagen → base64, Log → texto en el prompt             │
+│  • Tool: read_ecommerce_file(path) → Medusa.js           │
+│  • Produce: severity, module, summary, files, confidence │
+│  • Emite log: stage=triage                               │
+└──────────┬──────────────────────────┬───────────────────┘
+           │ triage_result            │ tool calls
+           │                          ▼
+           │              ┌───────────────────────┐
+           │              │  Medusa.js Codebase    │
+           │              │  (volumen read-only)   │
+           │              │  /app/medusa-repo/     │
+           │              │  packages/medusa/src/  │
+           │              └───────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────────────┐
+│                    TicketAgent                           │
+│  • Construye payload de la Card de Trello                │
+│  • Crea Card via Trello REST API                         │
+│  • Persiste trello_card_id en DB                         │
+│  • Emite log: stage=ticket                               │
+└──────────────────────────┬──────────────────────────────┘
+                           │ trello_card_id + url
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│                    NotifyAgent                           │
+│  • Slack: POST a Incoming Webhook → #incidents           │
+│  • Email: SendGrid API → reporter                        │
+│  • Persiste NotificationLog en DB                        │
+│  • Emite log: stage=notify                               │
+└─────────────────────────────────────────────────────────┘
+
+                    (proceso en background)
+┌─────────────────────────────────────────────────────────┐
+│                  ResolutionWatcher                       │
+│  • Polling Trello cada 60s                               │
+│  • Detecta Cards movidas a columna "Done"                │
+│  • Delega a NotifyAgent → email de resolución            │
+│  • Emite log: stage=resolved                             │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Variables de entorno requeridas
+## Separación de responsabilidades (crítica)
 
-| Variable | Módulo | Descripción |
+| Agente | Responsabilidad única | Lo que NO hace |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | PR Reviewer, QA Agent, Solution Proposer | API key de Anthropic (Claude) |
-| `OPENAI_API_KEY` | Business Reporter | API key de OpenAI (GPT-4o) |
-| `GITHUB_TOKEN` | GitHub Client | Token de GitHub Actions (automático en CI) |
-| `JIRA_BASE_URL` | Jira Adapter | URL base de la instancia Jira (ej: `https://tuempresa.atlassian.net`) |
-| `JIRA_API_TOKEN` | Jira Adapter | API token de Jira |
-| `JIRA_EMAIL` | Jira Adapter | Email del usuario de servicio en Jira |
-| `JIRA_PROJECT_KEY` | Jira Adapter | Clave del proyecto donde se crean los tickets (ej: `QA`) |
+| **IngestAgent** | Validación, sanitización, persistencia | No toma decisiones de negocio. No llama al LLM. No crea tickets. |
+| **TriageAgent** | Análisis y clasificación del incidente | No crea tickets. No notifica. No persiste directamente (solo el resultado del análisis). |
+| **TicketAgent** | Integración con el sistema de ticketing (Trello) | No interpreta el reporte. No analiza el codebase. |
+| **NotifyAgent** | Comunicación externa (Slack + email) | No genera contenido técnico. Recibe mensajes formateados y los despacha. |
+| **ResolutionWatcher** | Detección de tickets resueltos | No notifica directamente. Delega siempre a NotifyAgent. |
 
 ---
 
-## Principios de diseño
+## Modelo de orquestación
 
-1. **Modularidad**: cada agente es un módulo independiente con contrato claro (input/output).
-2. **Reemplazabilidad de modelos**: los clientes IA (`claude_client`, `openai_client`) son intercambiables — cambiar de modelo no afecta la lógica del agente.
-3. **Graceful degradation**: si un agente falla, el flujo continúa con estado parcial en lugar de bloquearse.
-4. **Análisis estático**: no hay ejecución de código ni sandbox — todo es análisis contextual del diff.
-5. **Trazabilidad**: cada artefacto (reporte, ticket) referencia el PR de origen.
+```
+FastAPI Application Server
+│
+├── POST /api/incidents
+│   ├── [sync]  IngestAgent.process(request) → incident_id
+│   ├── [sync]  Retorna HTTP 201 al cliente con trace_id
+│   └── [async] BackgroundTask → pipeline(incident_id)
+│                   ├── TriageAgent.process(incident_id)
+│                   ├── TicketAgent.process(triage_result)
+│                   └── NotifyAgent.process(ticket_result, "team_alert" + "reporter_confirmation")
+│
+├── GET /api/incidents/:id → estado del pipeline
+├── GET /api/observability/events → log viewer para el demo
+└── GET /api/health → health check de Docker
+
+ResolutionWatcher (thread separado)
+└── Polling loop cada 60s → Trello API → NotifyAgent si hay resoluciones
+```
+
+**Punto clave:** El cliente recibe respuesta HTTP 201 inmediatamente después de la ingestión. El pipeline de análisis corre en background. Esto evita timeouts en el frontend si el LLM tarda varios segundos.
+
+---
+
+## Observability — Contrato de eventos
+
+Cada agente emite un evento al completar su etapa usando `src/observability.emit_event()`:
+
+```json
+{
+  "timestamp": "2026-04-09T14:32:11.542Z",
+  "trace_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "stage": "triage",
+  "incident_id": 42,
+  "status": "success",
+  "duration_ms": 2341,
+  "metadata": {
+    "model": "claude-sonnet-4-6",
+    "severity_detected": "P2",
+    "module_detected": "cart",
+    "confidence": 0.87,
+    "files_found": 3
+  }
+}
+```
+
+Los eventos se escriben a:
+- stdout (visible en `docker compose logs`)
+- `logs/agent.log` (archivo persistente via volumen Docker)
+- SQLite tabla `observability_events` (consultable via GET /api/observability/events)
+
+---
+
+## Stack tecnológico
+
+| Componente | Tecnología | Razón |
+|---|---|---|
+| Backend / Orchestrator | Python 3.11 + FastAPI | Mejor integración con Anthropic SDK. Async nativo. |
+| LLM | Claude claude-sonnet-4-6 (Anthropic) | Multimodal nativo. Imagen + texto en el mismo request. |
+| Ticketing | Trello REST API | El equipo tiene cuenta. API REST simple con key+token. |
+| Comunicador | Slack Incoming Webhooks | No requiere OAuth. URL única por canal. |
+| Email | SendGrid API / MOCK | Free tier suficiente para el demo. |
+| Persistencia | SQLite + SQLAlchemy | Sin servicios externos. Compatible con PostgreSQL para escala. |
+| E-commerce base | Medusa.js (medusajs/medusa) | TypeScript, alta complejidad real, bien documentado. |
+| Contenedores | Docker + Docker Compose | Obligatorio para submission. |
+| Frontend | HTML5 + Vanilla JS | Formulario simple servido como estático por FastAPI. |
+
+---
+
+## Flujo de datos multimodal
+
+```
+1. Cliente sube formulario con imagen PNG (ej. screenshot de error 500)
+2. FastAPI recibe multipart/form-data
+3. IngestAgent guarda el archivo en uploads/{trace_id}.{ext}
+4. TriageAgent lee el archivo:
+   - Si es imagen (PNG/JPG): encode en base64 → Claude message con image_url
+   - Si es log (.txt/.log): leer como texto → incluir en el texto del mensaje
+5. Claude claude-sonnet-4-6 procesa imagen + descripción en un solo request
+6. Respuesta estructurada (JSON) es parseada y validada con Pydantic
+```
+
+---
+
+## ADRs relevantes
+
+- [ADR-001](adr/ADR-001-ecommerce-repo.md) — Selección de Medusa.js como repo e-commerce
+- [ADR-002](adr/ADR-002-observability-strategy.md) — Estrategia de observability
+- [ADR-003](adr/ADR-003-guardrails-strategy.md) — Guardrails y prompt injection
+- [ADR-004](adr/ADR-004-ticketing-trello.md) — Trello como sistema de ticketing

@@ -1,148 +1,152 @@
-# Domain Model — QA Multiagente
+# Domain Model — SRE Incident Intake & Triage Agent
 
-**Versión:** 0.1  
-**Fecha:** 2026-04-08
-
----
-
-## Entidades principales
-
-### PullRequest
-Representa el PR de GitHub que dispara el flujo.
-
-```
-PullRequest
-├── id: int
-├── number: int
-├── title: str
-├── author: str
-├── base_branch: str
-├── head_branch: str
-├── diff: str                  # diff completo (puede estar truncado)
-├── files_changed: list[str]   # rutas de archivos modificados
-├── url: str
-└── is_approved: bool          # resultado del gate de aprobación manual
-```
+**Version:** 1.0  
+**Owner:** Architect  
+**Last updated:** 2026-04-08
 
 ---
 
-### Finding
-Un hallazgo individual detectado por el QA Agent.
+## Entidades del dominio
+
+### Incident
+Representa el reporte de incidente recibido del reporter.
 
 ```
-Finding
-├── id: str                    # uuid generado
-├── file: str                  # ruta del archivo afectado
-├── function: str | None       # función o clase afectada
-├── line: int | None           # línea aproximada
-├── description: str           # descripción del problema
-├── severity: Literal["critical", "high", "medium", "low"]
-├── type: Literal["bug", "antipattern", "code_smell", "regression_risk"]
-├── confidence: float          # 0.0–1.0, certeza del agente
-└── source: Literal["pr_analysis", "bug_report"]  # Flujo A o B
+Incident
+├── id                  INTEGER  PRIMARY KEY AUTOINCREMENT
+├── trace_id            TEXT     NOT NULL UNIQUE  -- UUID v4, fluye por todo el pipeline
+├── title               TEXT     NOT NULL
+├── description         TEXT     NOT NULL         -- truncado a 2000 chars
+├── reporter_email      TEXT     NOT NULL
+├── attachment_type     TEXT                      -- 'image' | 'log' | null
+├── attachment_path     TEXT                      -- ruta local: uploads/{trace_id}.{ext}
+├── status              TEXT     NOT NULL DEFAULT 'received'
+│                                -- 'received' | 'triaging' | 'ticketed' | 'notified' | 'resolved'
+├── created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+└── updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ```
 
----
-
-### TechnicalReport
-Reporte técnico generado por Claude a partir de los hallazgos.
+### TriageResult
+Resultado del análisis del TriageAgent. Producido por Claude claude-sonnet-4-6.
 
 ```
-TechnicalReport
-├── pr_url: str | None         # link al PR de origen (None si viene del Flujo B)
-├── findings: list[FindingDetail]
-│   └── FindingDetail
-│       ├── finding_id: str    # referencia al Finding
-│       ├── file: str
-│       ├── function: str | None
-│       ├── description: str   # descripción técnica expandida
-│       ├── severity: str
-│       └── estimated_stack_trace: str | None
-├── impacted_modules: list[str]  # del análisis de regresión
-├── test_coverage_note: str    # nota sobre cobertura de tests (o ausencia)
-└── generated_at: datetime
+TriageResult
+├── id                  INTEGER  PRIMARY KEY AUTOINCREMENT
+├── incident_id         INTEGER  NOT NULL REFERENCES Incident(id)
+├── severity            TEXT     NOT NULL  -- 'P1' | 'P2' | 'P3' | 'P4'
+├── affected_module     TEXT     NOT NULL  -- ej. 'cart', 'payment', 'inventory'
+├── technical_summary   TEXT     NOT NULL  -- resumen técnico generado por el LLM
+├── suggested_files     TEXT     NOT NULL  -- JSON array de rutas de archivos de Medusa.js
+├── confidence_score    REAL     NOT NULL  -- 0.0 - 1.0
+├── raw_llm_response    TEXT              -- respuesta completa del LLM (para debugging)
+└── created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ```
-
----
-
-### BusinessReport
-Reporte en lenguaje natural generado por GPT-4o.
-
-```
-BusinessReport
-├── pr_url: str | None
-├── findings: list[BusinessFinding]
-│   └── BusinessFinding
-│       ├── finding_id: str    # referencia al Finding
-│       ├── user_impact: str   # qué falla en términos del usuario
-│       ├── steps_to_reproduce: str
-│       ├── expected_behavior: str
-│       ├── actual_behavior: str
-│       └── severity_label: str  # "crítico", "importante", "menor"
-├── status: Literal["complete", "pending"]  # "pending" si GPT-4o falló (EC8)
-└── generated_at: datetime
-```
-
----
 
 ### Ticket
-Modelo de ticket independiente del proveedor de gestión.
+Representa la Card creada en Trello.
 
 ```
 Ticket
-├── title: str
-├── technical_section: str     # contenido del TechnicalReport formateado
-├── business_section: str      # contenido del BusinessReport formateado
-├── severity: str              # severidad más alta de los hallazgos
-├── affected_files: list[str]
-├── pr_url: str | None
-├── provider_ticket_id: str    # ID del ticket creado en Jira (ej: "QA-42")
-└── provider_ticket_url: str   # URL del ticket en Jira
+├── id                  INTEGER  PRIMARY KEY AUTOINCREMENT
+├── incident_id         INTEGER  NOT NULL REFERENCES Incident(id)
+├── trello_card_id      TEXT                      -- null si pendiente de creación
+├── trello_card_url     TEXT                      -- URL directa a la Card
+├── trello_list_id      TEXT     NOT NULL          -- columna donde se creó (ej. "To Do")
+├── status              TEXT     NOT NULL DEFAULT 'pending'
+│                                -- 'pending' | 'created' | 'failed'
+├── created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+└── resolved_at         DATETIME                  -- cuando se detecta como Done en Trello
+```
+
+### NotificationLog
+Registro de todas las notificaciones enviadas (Slack + email).
+
+```
+NotificationLog
+├── id                  INTEGER  PRIMARY KEY AUTOINCREMENT
+├── incident_id         INTEGER  NOT NULL REFERENCES Incident(id)
+├── channel             TEXT     NOT NULL  -- 'slack' | 'email'
+├── recipient           TEXT     NOT NULL  -- email del reporter o '#incidents' para Slack
+├── notification_type   TEXT     NOT NULL
+│                                -- 'team_alert' | 'reporter_confirmation' | 'reporter_resolution'
+├── content_summary     TEXT     NOT NULL  -- resumen del mensaje enviado
+├── status              TEXT     NOT NULL  -- 'sent' | 'failed' | 'mocked'
+├── sent_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+└── error_message       TEXT              -- solo si status = 'failed'
+```
+
+### ObservabilityEvent
+Registro de cada evento emitido por los agentes del pipeline.
+
+```
+ObservabilityEvent
+├── id                  INTEGER  PRIMARY KEY AUTOINCREMENT
+├── trace_id            TEXT     NOT NULL  -- mismo trace_id que el Incident
+├── stage               TEXT     NOT NULL  -- 'ingest' | 'triage' | 'ticket' | 'notify' | 'resolved'
+├── incident_id         INTEGER            -- puede ser null si el error es antes de persistir
+├── status              TEXT     NOT NULL  -- 'success' | 'error'
+├── duration_ms         INTEGER  NOT NULL
+├── metadata            TEXT     NOT NULL  -- JSON con datos específicos de cada stage
+└── created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ```
 
 ---
 
-### SolutionProposal
-Propuesta de solución técnica generada por Claude para un hallazgo.
+## Diagrama de relaciones
 
 ```
-SolutionProposal
-├── finding_id: str
-├── approach: str              # descripción del enfoque sugerido
-├── files_to_modify: list[str] # archivos que deben cambiarse
-├── risk_notes: str            # consideraciones de riesgo de la solución
-└── jira_comment_id: str       # ID del comentario creado en Jira
-```
-
----
-
-### BugReport (Flujo B)
-Evidencia de bug enviada via formulario externo.
-
-```
-BugReport
-├── title: str
-├── description: str
-├── steps_to_reproduce: str
-├── expected_behavior: str
-├── actual_behavior: str
-├── context: str | None        # información adicional opcional
-└── submitted_at: datetime
+Incident (1) ──────── (1) TriageResult
+    │
+    │ (1) ──────── (1) Ticket
+    │
+    │ (1) ──────── (N) NotificationLog
+    │
+    │ (via trace_id)
+    └──────────── (N) ObservabilityEvent
 ```
 
 ---
 
-## Relaciones entre entidades
+## Estados del Incident (máquina de estados)
 
 ```
-PullRequest ──────────────────► Finding[] (1 PR genera N hallazgos)
-BugReport  ──────────────────► Finding[] (1 reporte genera N hallazgos)
-
-Finding[] ───┬──────────────► TechnicalReport (N hallazgos → 1 reporte técnico)
-             └──────────────► BusinessReport  (N hallazgos → 1 reporte de negocio)
-
-TechnicalReport + BusinessReport ──► Ticket (se combinan en 1 ticket)
-
-Finding[] ──────────────────────► SolutionProposal[] (1 hallazgo → 1 propuesta)
-SolutionProposal ───────────────► Ticket (adjunta como comentario)
+received ──→ triaging ──→ ticketed ──→ notified ──→ resolved
+    │             │            │
+    └─────────────┴────────────┴──→ (error: se registra en ObservabilityEvent)
 ```
+
+| Transición | Trigger | Agente responsable |
+|---|---|---|
+| received → triaging | IngestAgent persiste el reporte | IngestAgent |
+| triaging → ticketed | TriageAgent completa el análisis | TriageAgent |
+| ticketed → notified | TicketAgent crea la Card y NotifyAgent envía notificaciones | TicketAgent + NotifyAgent |
+| notified → resolved | ResolutionWatcher detecta Card en columna "Done" | ResolutionWatcher |
+
+---
+
+## Escala de severidad
+
+| Nivel | Descripción | Tiempo estimado de respuesta |
+|---|---|---|
+| **P1** | Sistema e-commerce completamente caído o checkout inaccesible | < 1 hora |
+| **P2** | Funcionalidad crítica degradada (pagos lentos, errores intermitentes en cart) | < 4 horas |
+| **P3** | Funcionalidad no crítica afectada (filtros de búsqueda, recomendaciones) | < 24 horas |
+| **P4** | Mejora menor o bug cosmético sin impacto en ventas | < 1 semana |
+
+---
+
+## Módulos de Medusa.js mapeados al dominio de triage
+
+El TriageAgent usa estos módulos como vocabulario para `affected_module`:
+
+| Módulo | Path en Medusa.js | Descripción |
+|---|---|---|
+| `cart` | `packages/medusa/src/services/cart.ts` | Gestión del carrito de compras |
+| `order` | `packages/medusa/src/services/order.ts` | Procesamiento de órdenes |
+| `payment` | `packages/medusa/src/services/payment.ts` | Integración de pagos |
+| `inventory` | `packages/medusa/src/services/inventory.ts` | Control de inventario |
+| `product` | `packages/medusa/src/services/product.ts` | Catálogo de productos |
+| `customer` | `packages/medusa/src/services/customer.ts` | Gestión de clientes y auth |
+| `shipping` | `packages/medusa/src/services/shipping.ts` | Métodos de envío |
+| `discount` | `packages/medusa/src/services/discount.ts` | Cupones y descuentos |
+| `unknown` | N/A | No se pudo determinar el módulo afectado |

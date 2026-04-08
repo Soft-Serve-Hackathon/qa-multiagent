@@ -1,35 +1,43 @@
 # Problem Statement
 
 ## Idea inicial
-Construir una plataforma de QA automatizada con agentes IA que cubra el ciclo completo desde la apertura de un PR hasta la creación de tickets de bugs en herramientas de gestión (Trello/Jira), integrando múltiples modelos de IA especializados por rol.
-
-## Flujo objetivo
-
-1. **Feature nueva** — el desarrollador termina el trabajo y abre un PR.
-2. **Revisión del PR por Copilot** — GitHub Actions dispara un agente que analiza el PR.
-3. **Reporte del PR** — el agente genera un resumen estructurado del PR.
-4. **Aprobación manual** — un humano revisa y aprueba o solicita cambios.
-5. **QA automático** — un agente evalúa UX/UI, código y regresión de la feature. Alternativamente, alguien sube evidencia de un bug/issue a través de un formulario para que el agente lo analice.
-6. **Reporte de QA dual** — dos agentes redactan el ticket:
-   - Agente técnico (Claude): redacta el ticket en lenguaje técnico.
-   - Agente de negocio (GPT o Gemini): redacta el mismo hallazgo en lenguaje natural para stakeholders.
-7. **Creación del ticket** — integración con la API de Trello o Jira para crear el ticket con ambas perspectivas.
-8. **Propuesta de solución** — un agente genera un reporte con la posible solución técnica del issue encontrado.
+Un agente SRE que convierte reportes de incidentes multimodales (texto + imagen de error + archivo de log) en tickets de Trello enriquecidos con análisis automático del codebase de la aplicación e-commerce, notifica al equipo técnico vía Slack y al reporter vía email, y cierra el ciclo cuando el incidente se resuelve.
 
 ## Problema principal
-Los equipos de desarrollo pierden tiempo y calidad porque el QA es manual, tardío e inconsistente. Los bugs llegan a producción porque no hay un ciclo automatizado que revise cada PR antes de mergearlo, y cuando se detectan issues en producción, el proceso de documentarlos y asignarlos es lento y depende de la disponibilidad del equipo.
+En equipos de ingeniería que operan aplicaciones e-commerce, el triage manual de incidentes consume entre **15 y 45 minutos por incidente**. El ingeniero on-call debe:
+
+1. Leer y entender el reporte del usuario (que puede ser ambiguo o incompleto)
+2. Correlacionar el error con los logs del sistema
+3. Buscar en el codebase qué módulo o servicio podría estar afectado
+4. Crear un ticket con suficiente contexto técnico para que otro ingeniero pueda actuar
+5. Notificar manualmente al canal correcto del equipo
+6. Recordar actualizar al reporter cuando el problema se resuelve
+
+Cada uno de estos pasos es manual, repetitivo y propenso a errores de clasificación. En e-commerce, **cada minuto de downtime tiene un costo directo en ventas perdidas y daño a la reputación de la marca**.
 
 ## A quién le duele
-- **Desarrolladores**: reciben feedback tardío y sin contexto suficiente.
-- **QA Engineers**: hacen trabajo repetitivo y tedioso de documentación.
-- **Product Managers / Tech Leads**: no tienen visibilidad rápida de la calidad de cada release.
-- **Stakeholders de negocio**: los reportes son muy técnicos o muy vagos, nunca en el formato que necesitan.
+
+### SRE on-call engineer
+El más afectado. Recibe alertas a cualquier hora, muchas veces con información incompleta. Tiene que reconstruir el contexto del problema antes de poder actuar. En incidentes de alta severidad (P1/P2), este tiempo de triage es crítico.
+
+### Reporter del incidente
+Puede ser un usuario final, un developer interno o un monitor automatizado. No sabe si su reporte fue recibido, quién lo está atendiendo, ni cuándo esperar una resolución. La falta de confirmación genera ruido: reportes duplicados, escaladas innecesarias, tickets incompletos.
+
+### Engineering manager / Tech lead
+No tiene visibilidad en tiempo real del estado de incidentes activos. Los tickets en Trello suelen crearse tarde, con contexto insuficiente, o directamente no se crean si el ingeniero on-call resuelve el problema rápido pero no documenta.
 
 ## Impacto
-Sin esta solución, el equipo sigue dependiendo de revisiones manuales lentas, la deuda técnica y de calidad crece silenciosamente, y los tickets de bugs carecen de la información necesaria para resolverlos rápido.
+Sin una solución:
+- **MTTR elevado**: el tiempo promedio de resolución se extiende por el overhead de triage manual
+- **Fatiga del equipo on-call**: tareas repetitivas de bajo valor que consumen energía cognitiva en momentos de alta presión
+- **Tickets incompletos**: sin contexto técnico suficiente, los tickets bloquean la investigación posterior
+- **Ciclo abierto**: el reporter nunca sabe que su incidente fue resuelto a menos que alguien recuerde notificarle
+- **Sin trazabilidad**: sin logs estructurados del proceso de triage, es imposible auditar qué pasó y cuándo
 
 ## Señales de valor
-- Tiempo promedio entre PR abierto y ticket creado se reduce.
-- Porcentaje de bugs detectados antes de merge aumenta.
-- Los tickets creados incluyen suficiente contexto para ser resueltos sin ir al desarrollador original.
-- Los stakeholders no técnicos entienden los reportes sin traducción manual.
+Sabremos que la solución vale la pena cuando:
+- El tiempo de triage se reduce de ~30 minutos a ~2 minutos (el agente genera el análisis y el ticket en segundos)
+- El reporter recibe confirmación automática con número de ticket dentro de los primeros 60 segundos de submitear el reporte
+- El ticket en Trello tiene suficiente contexto técnico (módulo afectado, severidad, archivos relevantes del codebase) para que un ingeniero pueda actuar sin ir y volver con el reporter
+- Los logs de observability permiten reconstruir exactamente qué hizo el agente en cada etapa del pipeline
+- El equipo on-call puede operar con MOCK_INTEGRATIONS=true en entornos sin credenciales configuradas y el sistema sigue funcionando
