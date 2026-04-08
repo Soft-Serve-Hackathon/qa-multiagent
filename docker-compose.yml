@@ -1,14 +1,16 @@
 version: '3.9'
 
 services:
-  # FastAPI application
-  app:
-    build: .
-    container_name: qa-multiagent-app
+  # FastAPI Backend Application
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    container_name: qa-multiagent-backend
     ports:
       - "8000:8000"
     volumes:
-      - ./src:/app/src
+      - ./backend/src:/app/src
       - ./data:/app/data
       - ./logs:/app/logs
       - ./uploads:/app/uploads
@@ -19,8 +21,6 @@ services:
       - PYTHONUNBUFFERED=1
     env_file:
       - .env
-    depends_on:
-      - db  # Optional: for future PostgreSQL migration
     networks:
       - qa-network
     healthcheck:
@@ -30,15 +30,24 @@ services:
       retries: 3
       start_period: 40s
 
-  # SQLite database container (optional, for future PostgreSQL)
-  db:
-    image: sqlite:latest
-    container_name: qa-multiagent-db
-    volumes:
-      - ./data:/data
+  # Nginx Frontend Application
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+    container_name: qa-multiagent-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
     networks:
       - qa-network
-    profiles: ["postgres"]  # Activate with: docker-compose --profile postgres up
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   qa-network:
