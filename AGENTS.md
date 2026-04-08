@@ -1,10 +1,13 @@
 # AI Agent Operating Model
 
-Este archivo define el contrato neutral de colaboración entre agentes IA y humanos.
+> **Nota:** Este archivo define los **roles de Claude Code** para colaborar en el proyecto.
+> No confundir con los **5 agentes internos del sistema SRE** (IngestAgent, TriageAgent, TicketAgent, NotifyAgent, ResolutionWatcher) documentados en `AGENTS_USE.md`.
+
+Este archivo define el contrato de colaboración entre los roles de agente IA usados durante el desarrollo del MVP.
 
 ## Objetivo
 
-Usar agentes especializados para refinar una idea, diseñar un MVP, implementar iterativamente y validar calidad sin perder trazabilidad.
+Usar roles especializados de Claude Code para refinar requerimientos, diseñar arquitectura, implementar iterativamente y validar calidad sin perder trazabilidad — aplicado al **SRE Incident Intake & Triage Agent** (AgentX Hackathon de SoftServe).
 
 ## Roles
 
@@ -124,6 +127,18 @@ Cada agente debe entregar:
 - `docs/idea/` → Product Analyst
 - `docs/specs/` → Product Analyst + Architect
 - `docs/architecture/` → Architect
-- `src/` → Backend / Frontend
-- `tests/` → QA + Engineers
+- `backend/src/` → Backend Engineer
+- `frontend/` → Frontend Engineer
+- `backend/tests/` → QA + Engineers
 - checklists/riesgos → QA + Security
+
+## Archivos clave del proyecto
+
+| Archivo | Propósito |
+|---|---|
+| `AGENTS_USE.md` | Arquitectura de los 5 agentes SRE del sistema |
+| `docs/specs/mvp/spec.md` | Especificación funcional completa (FR1-FR13, AC1-AC8) |
+| `docs/architecture/system-overview.md` | Pipeline de agentes y diagrama del sistema |
+| `docs/architecture/api-contracts.md` | Contratos de endpoints REST |
+| `tasks/active/TASK-001 a TASK-010` | Tareas activas del proyecto SRE |
+| `tasks/ROADMAP.md` | Orden de ejecución y dependencias de tareas |

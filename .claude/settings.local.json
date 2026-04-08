@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"Status\\\\|Version\\\\|Last updated\\\\|state\\\\|Estado\" tasks/active/*.md)",
+      "Bash(grep -l \"SRE\\\\|IngestAgent\\\\|trace_id\" /c/Users/valek/qa-multiagent/.github/instructions/*.md)",
+      "Bash(find /c/Users/valek/qa-multiagent -type f -name \"*.py\" -exec wc -l {} \\\\;)",
+      "Bash(xargs wc:*)"
+    ]
+  }
+}

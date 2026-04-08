@@ -1,5 +1,6 @@
-# Roadmap de Tareas — MVP QA Multiagente
+# Roadmap de Tareas — SRE Incident Intake & Triage Agent
 
+**Proyecto:** AgentX Hackathon de SoftServe  
 **Estado:** En progreso  
 **Última actualización:** 2026-04-08
 
@@ -8,56 +9,58 @@
 ## Orden de ejecución y dependencias
 
 ```
-T01 — Arquitectura base
- ├── T02 — GitHub Actions workflow
- │    └── T04 — Agente revisión PR ← T03 (GitHub client)
- │         └── T05 — Gate aprobación manual
- │              └── T06 — QA Agent: análisis código
- │                   ├── T07 — QA Agent: regresión
- │                   ├── T08 — Reporte técnico (Claude)
- │                   │    └── T10 — Integración tickets
- │                   │         └── T11 — Propuesta solución
- │                   │              └── T12 — Flujo B (formulario)
- │                   └── T09 — Reporte negocio (GPT/Gemini)
- │                        └── T10 (mismo nodo)
- └── T03 — GitHub API client
+TASK-001 — Project Structure & Config
+ ├── TASK-002 — IngestAgent
+ │    └── TASK-003 — TriageAgent
+ │         ├── TASK-004 — TicketAgent (Trello)
+ │         │    └── TASK-005 — NotifyAgent (Slack + SendGrid)
+ │         │         └── TASK-008 — ResolutionWatcher (Trello polling)
+ │         └── TASK-006 — Observability & Logging
+ ├── TASK-007 — Frontend (Next.js 14)
+ └── TASK-009 — Docker Setup
+      └── TASK-010 — Ecommerce Integration (Medusa.js)
 ```
 
 ---
 
 ## Tabla de tareas
 
-| ID | Título | Fase | Rol | Depende de | Estado |
-|---|---|---|---|---|---|
-| T01 | Arquitectura base del sistema | Fase 1 | Architect | — | pendiente |
-| T02 | GitHub Actions workflow (PR trigger) | Fase 1 | Backend | T01 | pendiente |
-| T03 | GitHub API client | Fase 1 | Backend | T01 | pendiente |
-| T04 | Agente de revisión de PR (Claude) | Fase 1 | Backend | T02, T03 | pendiente |
-| T05 | Gate de aprobación manual | Fase 1 | Backend | T03 | pendiente |
-| T06 | QA Agent: análisis de código y bugs | Fase 2 | Backend | T05, T03 | pendiente |
-| T07 | QA Agent: análisis de impacto/regresión | Fase 2 | Backend | T06 | pendiente |
-| T08 | Agente reporte técnico (Claude) | Fase 3 | Backend | T06, T07 | pendiente |
-| T09 | Agente reporte de negocio (GPT/Gemini) | Fase 3 | Backend | T06 | pendiente |
-| T10 | Integración tickets Jira/Trello | Fase 4 | Backend | T08, T09 | pendiente |
-| T11 | Agente propuesta de solución técnica | Fase 5 | Backend | T06, T10 | pendiente |
-| T12 | Flujo B: ingesta de bugs por formulario | Fase 5 | Backend | T06, T08, T09, T10 | pendiente |
+| ID | Título | Stack | Depende de | Estado |
+|---|---|---|---|---|
+| TASK-001 | Project structure, config, entidades de dominio | Python / FastAPI | — | pendiente |
+| TASK-002 | IngestAgent: validación + detección de injection | Python | TASK-001 | pendiente |
+| TASK-003 | TriageAgent: Claude LLM + tool calls Medusa.js | Python / Anthropic | TASK-002 | pendiente |
+| TASK-004 | TicketAgent: creación de card en Trello | Python / Trello API | TASK-003 | pendiente |
+| TASK-005 | NotifyAgent: Slack webhook + SendGrid email | Python / Slack / SendGrid | TASK-004 | pendiente |
+| TASK-006 | Observability: JSON logging + trace_id pipeline | Python | TASK-002 | pendiente |
+| TASK-007 | Frontend: Next.js 14 form + status tracker | TypeScript / Next.js | TASK-001 | pendiente |
+| TASK-008 | ResolutionWatcher: polling Trello background task | Python / FastAPI BG | TASK-005 | pendiente |
+| TASK-009 | Docker Compose: backend + frontend + volumes | Docker | TASK-007 | pendiente |
+| TASK-010 | Ecommerce integration: Medusa.js file index | Python / Medusa.js | TASK-003 | pendiente |
 
 ---
 
 ## Tareas paralelas posibles
 
-- **T02 y T03** pueden desarrollarse en paralelo (misma fase, sin dependencia entre ellas)
-- **T08 y T09** deben ejecutarse en paralelo (reportes dual, misma ejecución)
-- **T06 y T07** son secuenciales (T07 extiende T06)
+- **TASK-002 y TASK-007** pueden desarrollarse en paralelo (backend agent vs frontend)
+- **TASK-006** puede desarrollarse en paralelo con TASK-003+ (observability es transversal)
+- **TASK-004 y TASK-005** son secuenciales (Notify requiere ticket_id de Trello)
 
 ---
 
-## Open Questions
+## Criterios de Done por tarea
 
-| OQ | Pregunta | Estado | Decisión |
-|---|---|---|---|
-| OQ1 | ¿Jira o Trello primero? | ✅ Resuelto | Jira |
-| OQ2 | ¿Qué formulario para bugs? | ✅ Resuelto | Google Forms o Notion (externo, webhook) |
-| OQ3 | ¿GPT-4o o Gemini 1.5 Pro? | ✅ Resuelto | GPT-4o (OpenAI) |
-| OQ4 | ¿Tokens máximos por ejecución? | ⏳ Pendiente | Definir durante implementación de cada agente |
-| OQ5 | ¿Propuesta como campo o comentario? | ✅ Resuelto | Comentario del ticket en Jira |
+Cada tarea se considera completada cuando:
+1. Código implementado y con tests unitarios (happy path + edge cases)
+2. Criterios de aceptación de `docs/specs/mvp/spec.md` cubiertos
+3. `trace_id` propagado correctamente (si aplica)
+4. Handoff documentado en el archivo de tarea
+
+---
+
+## Referencia
+
+- Spec: `docs/specs/mvp/spec.md`
+- Arquitectura: `docs/architecture/system-overview.md`
+- ADRs: `docs/architecture/adr/`
+- Definition of Done: `docs/quality/definition-of-done.md`

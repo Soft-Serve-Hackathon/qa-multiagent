@@ -11,7 +11,7 @@
 
 Sistema multi-agente de ingesta y triage automático de incidentes para una aplicación e-commerce (Medusa.js). Convierte un reporte multimodal (texto + imagen de error o archivo de log) en una Card de Trello enriquecida con análisis del codebase, notifica al equipo técnico vía Slack y al reporter vía email, y cierra el ciclo cuando el incidente se resuelve.
 
-Construido para el **AgentX Hackathon de SoftServe** — [docs/hackathon/context.md](../hackathon/context.md)
+Construido para el **AgentX Hackathon de SoftServe** — [docs/context.md](../../context.md)
 
 ---
 

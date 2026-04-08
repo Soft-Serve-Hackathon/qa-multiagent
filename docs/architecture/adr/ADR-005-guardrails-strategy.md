@@ -1,4 +1,4 @@
-# ADR-003: Estrategia de guardrails — Protección contra prompt injection
+# ADR-005: Estrategia de guardrails — Protección contra prompt injection
 
 ## Status
 Accepted

@@ -130,7 +130,7 @@ docker compose up --build
 | [docs/specs/mvp/spec.md](docs/specs/mvp/spec.md) | Full MVP specification (FR1-FR13, AC1-AC8) |
 | [docs/architecture/system-overview.md](docs/architecture/system-overview.md) | System design and agent pipeline |
 | [docs/architecture/adr/](docs/architecture/adr/) | Architecture Decision Records |
-| [docs/hackathon/context.md](docs/hackathon/context.md) | Hackathon context and requirements |
+| [docs/context.md](docs/context.md) | Hackathon context and requirements |
 
 ---
 

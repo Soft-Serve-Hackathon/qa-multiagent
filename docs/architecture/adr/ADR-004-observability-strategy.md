@@ -1,4 +1,4 @@
-# ADR-002: Estrategia de observability — Logging estructurado JSON
+# ADR-004: Estrategia de observability — Logging estructurado JSON
 
 ## Status
 Accepted

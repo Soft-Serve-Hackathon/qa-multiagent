@@ -53,7 +53,7 @@ MOCK_EMAIL=false
 docker compose up --build
 ```
 
-First run clones Medusa.js (e-commerce reference repo) — may take 2-3 minutes.
+First run builds backend and frontend images — may take 2-3 minutes.
 
 ### 4. Open the application
 ```
@@ -165,7 +165,7 @@ Expected:
 
 | Problem | Likely cause | Solution |
 |---|---|---|
-| `docker compose up` fails on Medusa.js clone | No internet or git not available in Docker | Check network, ensure Docker has internet access |
+| `docker compose up` fails during build | No internet or missing dependencies | Check network connection and Docker daemon status |
 | `ANTHROPIC_API_KEY` error | Key not set or invalid | Verify key in `.env` — get one at console.anthropic.com |
 | Trello card not created | Wrong `TRELLO_LIST_ID` or invalid token | Get IDs from Trello board URL, regenerate token at trello.com/app-key |
 | Slack message not sent | Invalid webhook URL | Create a new webhook at api.slack.com/apps |

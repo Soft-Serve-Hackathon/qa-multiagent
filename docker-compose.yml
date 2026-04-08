@@ -30,7 +30,7 @@ services:
       retries: 3
       start_period: 40s
 
-  # Nginx Frontend Application
+  # Next.js Frontend Application
   frontend:
     build:
       context: .

@@ -102,17 +102,9 @@ The MVP runs as a single Docker container with FastAPI, SQLite, and a background
 **Cost optimization strategies:**
 - Cache triage results for identical/near-identical incident texts (semantic deduplication)
 - Use a lighter model (claude-haiku-4-5) for low-confidence initial triage, escalate to claude-sonnet-4-6 for P1/P2
-- OpenRouter support: `LLM_PROVIDER=openrouter` env var allows switching to alternative models at lower cost
+- Use a lighter model (claude-haiku-4-5) for low-confidence initial triage, escalate to claude-sonnet-4-6 for P1/P2 (future)
 
 ---
-
-## OpenRouter Support
-
-The LLM client abstraction in `src/llm_client.py` supports `LLM_PROVIDER` env var:
-- `LLM_PROVIDER=anthropic` (default) → uses Anthropic SDK directly
-- `LLM_PROVIDER=openrouter` → routes through OpenRouter API, enabling access to alternative models
-
-This allows cost optimization in production without changing agent code.
 
 ---
 

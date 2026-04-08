@@ -1,4 +1,4 @@
-# ADR-004: Trello como sistema de ticketing
+# ADR-006: Trello como sistema de ticketing
 
 ## Status
 Accepted

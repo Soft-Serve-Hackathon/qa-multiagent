@@ -89,9 +89,9 @@ Cada carpeta en `backend/src/` representa una capa:
 - Stateless (state in SQLite)
 
 **Frontend:**
-- Nginx on port `3000`
-- Vanilla HTML/CSS/JS (no framework dependencies)
-- Proxies API calls to backend via nginx `proxy_pass`
+- Next.js 14 on port `3000` (TypeScript + Tailwind CSS)
+- App Router with React components (IncidentForm, StatusTracker)
+- Proxies API calls to backend via `next.config.js` rewrites → `http://backend:8000`
 - Real-time polling for incident status (trace_id visibility)
 
 ## 🐳 Docker Orchestration
@@ -126,7 +126,7 @@ Each service can have its own `.env.example`:
 
 Both services communicate via named network `qa-network`:
 - Backend: `http://backend:8000` (internal DNS)
-- Frontend: `http://backend:8000/api/...` (via nginx reverse proxy)
+- Frontend: `http://backend:8000/api/...` (via Next.js rewrites in next.config.js)
 
 ### Volumes
 
