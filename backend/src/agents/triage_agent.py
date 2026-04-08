@@ -81,19 +81,29 @@ class TriageAgent:
             attachment_image_base64 = FileStorageManager.get_image_base64(trace_id)
             attachment_log_text = FileStorageManager.get_log_text(trace_id)
 
-            # ── 4️⃣ Call Claude with multimodal content ────────────────────────
-            logger.info(
-                f"[{trace_id}] Calling Claude for triage"
-                f" (image={bool(attachment_image_base64)}, log={bool(attachment_log_text)})"
-            )
+            # ── 4️⃣ Call Claude with multimodal content (or mock) ──────────────
+            if self.settings.mock_integrations:
+                logger.info(f"[{trace_id}] MOCK MODE: Skipping LLM call, returning simulated triage")
+                triage_data = {
+                    "severity": "P2",
+                    "affected_module": "backend",
+                    "technical_summary": "[MOCK] Simulated triage analysis. Real LLM disabled by MOCK_INTEGRATIONS=true",
+                    "suggested_files": ["src/api/handler.py", "src/services/cache.py"],
+                    "confidence_score": 0.8,
+                }
+            else:
+                logger.info(
+                    f"[{trace_id}] Calling Claude for triage"
+                    f" (image={bool(attachment_image_base64)}, log={bool(attachment_log_text)})"
+                )
 
-            triage_data = self.llm_client.process_triage(
-                incident_title=incident_title,
-                incident_description=incident_description,
-                attachment_image_base64=attachment_image_base64,
-                attachment_log_text=attachment_log_text,
-                trace_id=trace_id,
-            )
+                triage_data = self.llm_client.process_triage(
+                    incident_title=incident_title,
+                    incident_description=incident_description,
+                    attachment_image_base64=attachment_image_base64,
+                    attachment_log_text=attachment_log_text,
+                    trace_id=trace_id,
+                )
 
             # ── 5️⃣ Validate triage result structure ────────────────────────────
             required_fields = [

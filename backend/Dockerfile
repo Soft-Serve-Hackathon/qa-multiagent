@@ -29,6 +29,9 @@ COPY backend/requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
+# Copy environment configuration
+COPY .env .
+
 # Copy source code
 COPY backend/src/ ./src/
 
