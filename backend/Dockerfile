@@ -25,12 +25,12 @@ RUN git clone --depth 1 https://github.com/medusajs/medusa.git /app/medusa-repo 
     git log -1 --oneline
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
 # Copy source code
-COPY src/ ./src/
+COPY backend/src/ ./src/
 
 # Expose port
 EXPOSE 8000
