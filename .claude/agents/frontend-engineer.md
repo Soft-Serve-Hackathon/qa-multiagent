@@ -23,38 +23,49 @@ Implementar la experiencia mínima del MVP alineada con la spec y los contratos.
 - criterios de aceptación: AC1-AC8 en la spec
 
 ## SRE Domain Context
-La UI es un **formulario de reporte de incidentes**. No es una SPA compleja. El stack es HTML5 + Vanilla JS, servido como archivos estáticos por FastAPI desde `src/frontend/`.
+La UI es un **formulario de reporte de incidentes**. Stack: **Next.js 14 + React 18 + TypeScript + Tailwind CSS**, ejecutado desde `frontend/app/`
+
+**Componentes principales:**
+- `app/page.tsx` → Estado orchestration + router
+- `app/components/IncidentForm.tsx` → Form component (React + hooks)
+- `app/components/StatusTracker.tsx` → Status polling component
+- `lib/api.ts` → Axios client centralizado
 
 **Campos requeridos del formulario:**
-| Campo | Tipo HTML | Validación cliente | Requerido |
+| Campo | React Input | Validación cliente | Requerido |
 |---|---|---|---|
 | `title` | `<input type="text">` | max 200 chars | Sí |
 | `description` | `<textarea>` | max 2000 chars con contador | Sí |
-| `reporter_email` | `<input type="email">` | formato email válido | Sí |
-| `attachment` | `<input type="file">` | accept="image/png,image/jpeg,text/plain", max 10MB | No |
+| `reporter_email` | `<input type="email">` | formato email válido (regex) | Sí |
+| `attachment` | `<input type="file">` | PNG/JPEG/TXT/JSON, max 10MB | No |
 
-**Estados de UI requeridos (todos obligatorios):**
-| Estado | Trigger | Mensaje al usuario |
+**Estados de UI requeridos (todo obligatorio):**
+| Estado | Trigger | Mensaje +UI |
 |---|---|---|
-| `idle` | Estado inicial | Formulario vacío listo para llenar |
-| `loading` | POST enviado, esperando respuesta | "Analyzing your incident report..." + spinner |
-| `success` | HTTP 201 recibido | "Ticket created successfully. Reference: [trace_id]. You will be notified by email." |
-| `error-injection` | HTTP 400 con `prompt_injection_detected` | "Your report contains content that cannot be processed. Please rephrase and try again." |
-| `error-validation` | HTTP 400 con otros errores | Mensaje específico del error (email inválido, archivo muy grande, etc.) |
-| `error-server` | HTTP 500 | "Something went wrong. Please try again in a few minutes." |
+| `idle` | Estado inicial | Formulario vacío + botón enabled |
+| `loading` | POST enviado | Spinner + "Submitting..." + botón disabled |
+| `success` | HTTP 201 con trace_id | Trace_id visible + timeline de progreso |
+| `error-injection` | HTTP 400 injection_detected | "Your report contains content..." (rojo) |
+| `error-validation` | HTTP 400 validation_error | Mensaje específico del error (rojo) |
+| `error-server` | HTTP 500 | "Something went wrong..." (rojo) |
 
-**Multimodal UX:**
-- Si el adjunto es una imagen (PNG/JPG): mostrar preview de la imagen con nombre del archivo
-- Si el adjunto es un log (.txt/.log): mostrar icono de documento + nombre del archivo
-- Mostrar el tipo de archivo aceptado y el límite de 10MB en texto de ayuda bajo el campo
-- Validar el tamaño del archivo en cliente antes de enviar (evitar uploads innecesarios)
+**Multimodal UX con React:**
+- State para file preview: if (file instanceof File) render thumbnail o icono
+- Character counter: realtime update en description field
+- File validation: antes del POST, reject >10MB
+- MIME validation: accept solo PNG, JPEG, TXT, JSON
 
-## Estructura de archivos
+## Estructura de archivos (Next.js 14)
 ```
-src/frontend/
-├── index.html     # formulario principal
-├── styles.css     # estilos básicos (no usar frameworks CSS pesados)
-└── app.js         # lógica de submit, validación cliente, manejo de estados
+frontend/
+├── app/
+│   ├── page.tsx                # Home page principal
+│   ├── globals.css             # Tailwind + custom utilities
+│   ├── layout.tsx              # Root layout
+│   └── components/             # React components
+├── lib/
+│   └── api.ts                  # Axios client
+└── public/                     # Static assets
 ```
 
 ## Llamada a la API
