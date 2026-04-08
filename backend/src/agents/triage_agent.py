@@ -83,13 +83,23 @@ class TriageAgent:
 
             # ── 4️⃣ Call Claude with multimodal content (or mock) ──────────────
             if self.settings.mock_integrations:
-                logger.info(f"[{trace_id}] MOCK MODE: Skipping LLM call, returning simulated triage")
+                logger.info(f"[{trace_id}] MOCK MODE: Generating simulated triage with reasoning chain")
+                
+                # Simulate reasoning chain for demonstration
+                reasoning_chain = [
+                    {"step": "symptom_analysis", "analysis": f"Primary symptom detected: '{incident_title}'. Priority keywords: connection, pool, database, error."},
+                    {"step": "severity_assessment", "analysis": "Revenue impact: HIGH (database unavailability). User impact: MANY (affects all queries). Service impact: CRITICAL. Recommended severity: P2."},
+                    {"step": "component_analysis", "analysis": "Pattern matching identifies Database service. Related components: Connection pooling layer, ORM configuration."},
+                    {"step": "confidence_score", "analysis": "Keywords match known patterns with high confidence."},
+                ]
+                
                 triage_data = {
                     "severity": "P2",
                     "affected_module": "backend",
                     "technical_summary": "[MOCK] Simulated triage analysis. Real LLM disabled by MOCK_INTEGRATIONS=true",
                     "suggested_files": ["src/api/handler.py", "src/services/cache.py"],
                     "confidence_score": 0.8,
+                    "reasoning_chain": reasoning_chain,  # <- NUEVO: Reasoning agregado
                 }
             else:
                 logger.info(
@@ -132,6 +142,7 @@ class TriageAgent:
                     technical_summary=triage_data["technical_summary"],
                     suggested_files=json.dumps(triage_data.get("suggested_files", [])),
                     confidence_score=triage_data.get("confidence_score", 0.5),
+                    reasoning_chain=json.dumps(triage_data.get("reasoning_chain", [])),  # <- NUEVO
                     raw_llm_response=None,  # Only store if debugging is needed
                 )
                 db.add(triage_result)

@@ -95,6 +95,7 @@ class TriageResultModel(Base):
     technical_summary = Column(Text, nullable=False)
     suggested_files = Column(Text, nullable=False)         # JSON array stored as TEXT
     confidence_score = Column(Float, nullable=False)
+    reasoning_chain = Column(Text, nullable=True)          # JSON array: reasoning steps (NEW)
     raw_llm_response = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
@@ -103,6 +104,16 @@ class TriageResultModel(Base):
 
     def set_suggested_files(self, files: list[str]) -> None:
         self.suggested_files = json.dumps(files)
+    
+    def get_reasoning_chain(self) -> list[dict]:
+        """Get structured reasoning chain."""
+        if not self.reasoning_chain:
+            return []
+        return json.loads(self.reasoning_chain)
+    
+    def set_reasoning_chain(self, chain: list[dict]) -> None:
+        """Set reasoning chain from list of step dicts."""
+        self.reasoning_chain = json.dumps(chain)
 
 
 class TicketModel(Base):
