@@ -1,6 +1,7 @@
 """ResolutionWatcher — background thread that polls Trello for resolved cards."""
 import threading
 import time
+from datetime import datetime
 from src.config import settings
 from src.infrastructure.database import SessionLocal
 from src.infrastructure.external.trello_client import TrelloClient
@@ -60,7 +61,7 @@ class ResolutionWatcher:
                     from src.agents.notify_agent import NotifyAgent
                     notify_agent = NotifyAgent(db)
                     notify_agent.send_resolution(incident, ticket)
-                    ticket.resolved_at = __import__("datetime").datetime.utcnow()
+                    ticket.resolved_at = datetime.utcnow()
                     db.commit()
         finally:
             db.close()

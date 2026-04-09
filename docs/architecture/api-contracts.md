@@ -68,10 +68,10 @@ Posibles valores de `error`:
 
 ---
 
-### GET /api/incidents/:trace_id
+### GET /api/incidents/:incident_id
 **Descripción:** Consulta el estado actual de un incidente en el pipeline.
 
-**Path params:** `trace_id` — UUID string, el trace_id retornado por POST /api/incidents
+**Path params:** `incident_id` — integer, el incident_id retornado por POST /api/incidents
 
 **Response 200:**
 ```json
@@ -82,8 +82,13 @@ Posibles valores de `error`:
   "status": "notified",
   "severity": "P2",
   "affected_module": "cart",
+  "confidence_score": 0.85,
+  "technical_summary": "Root cause analysis from Claude...",
+  "suggested_files": ["packages/modules/cart/src/services/cart-module.ts"],
   "trello_card_id": "6471abc123def456",
   "trello_card_url": "https://trello.com/c/6471abc123def456",
+  "deduplicated": false,
+  "linked_ticket_id": null,
   "created_at": "2026-04-09T14:30:00Z",
   "updated_at": "2026-04-09T14:30:45Z"
 }
@@ -160,6 +165,26 @@ Posibles valores de `error`:
     }
   ],
   "total": 5
+}
+```
+
+---
+
+### GET /api/dashboard/stats
+**Descripción:** Estadísticas agregadas del pipeline para el dashboard de operaciones.
+
+**Response 200:**
+```json
+{
+  "total_incidents": 24,
+  "severity_breakdown": { "P1": 2, "P2": 5, "P3": 14, "P4": 3 },
+  "status_breakdown": { "received": 0, "triaging": 1, "deduplicated": 3, "ticketed": 2, "notified": 16, "resolved": 2 },
+  "top_modules": [{"module": "cart", "count": 8}, {"module": "payment", "count": 5}],
+  "avg_triage_ms": 42500,
+  "avg_ticket_ms": 350,
+  "deduplication_rate": 0.125,
+  "pipeline_success_rate": 0.75,
+  "recent_incidents": [...]
 }
 ```
 

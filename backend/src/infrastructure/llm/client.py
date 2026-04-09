@@ -1,30 +1,101 @@
-"""Anthropic Claude client — multimodal incident triage with tool use."""
+"""Anthropic Claude client — multimodal triage, QA scope, and fix recommendation."""
 import json
+import re
 import anthropic
 from src.config import settings
 from src.infrastructure.llm.tools import TOOLS, handle_tool_call
 
-SYSTEM_PROMPT = """You are an expert SRE (Site Reliability Engineer) specialized in e-commerce systems built with Medusa.js.
+# ─── Triage System Prompt ─────────────────────────────────────────────────────
 
-Your task is to triage incident reports by analyzing the description and any attached files (screenshots or logs), then inspect the relevant Medusa.js source code using the read_ecommerce_file tool.
+TRIAGE_SYSTEM_PROMPT = """You are an expert SRE (Site Reliability Engineer) specialized in e-commerce systems built with Medusa.js v2.
 
-Always respond with a valid JSON object using exactly this structure:
+Your task is to triage incident reports by analyzing the description and any attached files (screenshots or logs), then inspect the relevant Medusa.js source code using the available tools.
+
+Use list_ecommerce_files to discover the available files in a module directory, then read_ecommerce_file to inspect the relevant source files before generating your assessment.
+
+Real Medusa.js v2 module structure:
+- packages/modules/<module>/src/services/<module>-module.ts  (main service)
+- packages/modules/<module>/src/models/  (data models)
+- Available modules: cart, order, payment, inventory, product, customer, fulfillment, pricing, promotion, region, auth, user, notification, tax
+
+Always respond with a valid JSON object using EXACTLY this structure — reasoning_chain is REQUIRED:
 {
+  "reasoning_chain": [
+    {"step": "symptom_analysis", "analysis": "What is the primary symptom? Active or resolved? User scope?"},
+    {"step": "severity_reasoning", "analysis": "Revenue impact + user impact + service impact → why this severity?", "selected_severity": "P2"},
+    {"step": "module_identification", "analysis": "Which Medusa.js module owns this behavior? Evidence from code?", "identified_module": "cart"},
+    {"step": "codebase_correlation", "analysis": "What did you find in the source files? Which lines/methods are relevant?"},
+    {"step": "confidence_assessment", "analysis": "How confident are you? What assumptions were made?", "confidence_score": 0.85}
+  ],
   "severity": "P1" | "P2" | "P3" | "P4",
-  "affected_module": "cart" | "order" | "payment" | "inventory" | "product" | "customer" | "shipping" | "discount" | "unknown",
-  "technical_summary": "<2-3 sentence technical summary of the issue and likely root cause>",
-  "suggested_files": ["path/to/file1.ts", "path/to/file2.ts"],
-  "confidence_score": 0.0 to 1.0
+  "affected_module": "cart" | "order" | "payment" | "inventory" | "product" | "customer" | "fulfillment" | "pricing" | "promotion" | "region" | "auth" | "user" | "notification" | "tax" | "unknown",
+  "technical_summary": "<2-3 sentence technical summary of the issue and likely root cause based on code inspection>",
+  "suggested_files": ["packages/modules/cart/src/services/cart-module.ts"],
+  "confidence_score": 0.0
 }
 
 Severity guide:
-- P1: System completely down, checkout inaccessible
-- P2: Critical functionality degraded (slow payments, cart errors)
-- P3: Non-critical functionality affected (search, recommendations)
-- P4: Minor bug, cosmetic issue
+- P1: System completely down, checkout inaccessible, data loss risk
+- P2: Critical functionality degraded (slow payments, cart errors affecting all users)
+- P3: Non-critical functionality affected (search, recommendations, partial errors)
+- P4: Minor bug, cosmetic issue, edge case
 
-Use read_ecommerce_file to inspect the relevant source files before generating your assessment."""
+Show your work step by step in reasoning_chain BEFORE writing the final severity/module/summary."""
 
+# ─── QA Scope System Prompt ───────────────────────────────────────────────────
+
+QA_SCOPE_SYSTEM_PROMPT = """You are a QA Engineer specialized in Medusa.js e-commerce systems.
+
+Given an incident triage result, your job is to:
+1. Find existing test files related to the affected module in the Medusa.js codebase
+2. Assess whether the incident scenario is covered by existing tests
+3. If not covered, propose a minimal regression test snippet (TypeScript/Jest)
+
+Use list_ecommerce_files to find test directories, and read_ecommerce_file to inspect test files.
+
+Test file locations in Medusa.js v2:
+- packages/modules/<module>/integration-tests/__tests__/services/
+- packages/modules/<module>/src/services/__tests__/
+
+Always respond with a valid JSON object using EXACTLY this structure:
+{
+  "reproduced": true | false,
+  "failing_tests": ["path/to/test.spec.ts::test name"],
+  "new_tests_created": ["describe('cart module', () => { it('should...', async () => { ... }) })"],
+  "test_evidence_summary": "2-3 sentence summary of test coverage findings",
+  "coverage_files": ["packages/modules/cart/integration-tests/__tests__/services/cart.spec.ts"]
+}
+
+If you cannot find relevant tests or the module has no test coverage for this scenario, set reproduced=false and propose a new test in new_tests_created."""
+
+# ─── Fix Recommendation System Prompt ────────────────────────────────────────
+
+FIX_RECOMMENDATION_SYSTEM_PROMPT = """You are a senior Medusa.js engineer providing fix recommendations for production incidents.
+
+Given triage analysis and QA scope results, your job is to:
+1. Read the relevant source files identified in triage
+2. Propose a concrete technical fix
+3. Assess the risk of applying the fix
+4. Describe what tests should be run after the fix
+
+Use read_ecommerce_file to inspect the specific files before proposing the fix.
+
+Always respond with a valid JSON object using EXACTLY this structure:
+{
+  "proposed_fix_summary": "2-3 sentence description of the proposed fix and how it addresses the root cause",
+  "proposed_files": ["packages/modules/cart/src/services/cart-module.ts"],
+  "risk_level": "low" | "medium" | "high",
+  "post_fix_test_result": "Description of tests to run and expected outcomes to validate the fix",
+  "code_snippet": "Optional: minimal code change snippet showing the key fix"
+}
+
+Risk assessment:
+- low: Isolated change, no side effects, test coverage exists
+- medium: Moderate scope, some side effects possible, partial test coverage
+- high: Wide impact, affects core flow, limited test coverage or complex change"""
+
+
+# ─── LLM Client ───────────────────────────────────────────────────────────────
 
 class LLMClient:
     def __init__(self):
@@ -40,13 +111,8 @@ class LLMClient:
         attachment_text: str | None = None,
         attachment_media_type: str = "image/png",
     ) -> dict:
-        """
-        Call Claude to triage an incident. Supports multimodal input (image or log).
-        Returns a parsed dict with severity, affected_module, technical_summary, etc.
-        """
-        # Build user message content
+        """Call Claude to triage an incident. Returns parsed dict with reasoning_chain."""
         content: list = []
-
         text_parts = [f"Incident Title: {title}", f"Description: {description}"]
 
         if attachment_type == "log" and attachment_text:
@@ -64,33 +130,73 @@ class LLMClient:
                 },
             })
 
-        messages = [{"role": "user", "content": content}]
+        return self._run_agentic_loop(
+            system=TRIAGE_SYSTEM_PROMPT,
+            initial_content=content,
+            parser=self._parse_triage_json,
+        )
 
-        # Agentic loop — handle tool calls until Claude returns final JSON
+    def qa_scope_incident(self, triage: dict) -> dict:
+        """Call Claude to find/propose tests for the incident module."""
+        text = (
+            f"Incident Triage Results:\n"
+            f"- Severity: {triage.get('severity', 'unknown')}\n"
+            f"- Affected Module: {triage.get('affected_module', 'unknown')}\n"
+            f"- Technical Summary: {triage.get('technical_summary', '')}\n"
+            f"- Suggested Files: {', '.join(triage.get('suggested_files', []))}\n\n"
+            f"Find existing tests for this module and assess coverage for this incident scenario."
+        )
+        return self._run_agentic_loop(
+            system=QA_SCOPE_SYSTEM_PROMPT,
+            initial_content=[{"type": "text", "text": text}],
+            parser=self._parse_qa_json,
+        )
+
+    def fix_recommendation_incident(self, triage: dict, qa: dict) -> dict:
+        """Call Claude to propose a technical fix based on triage + QA results."""
+        text = (
+            f"Incident Triage:\n"
+            f"- Severity: {triage.get('severity', 'unknown')}\n"
+            f"- Module: {triage.get('affected_module', 'unknown')}\n"
+            f"- Summary: {triage.get('technical_summary', '')}\n"
+            f"- Suggested Files: {', '.join(triage.get('suggested_files', []))}\n\n"
+            f"QA Scope:\n"
+            f"- Reproduced: {qa.get('reproduced', False)}\n"
+            f"- Failing Tests: {qa.get('failing_tests', [])}\n"
+            f"- Evidence: {qa.get('test_evidence_summary', '')}\n\n"
+            f"Inspect the suggested files and propose a concrete fix."
+        )
+        return self._run_agentic_loop(
+            system=FIX_RECOMMENDATION_SYSTEM_PROMPT,
+            initial_content=[{"type": "text", "text": text}],
+            parser=self._parse_fix_json,
+        )
+
+    # ─── Agentic loop ─────────────────────────────────────────────────────────
+
+    def _run_agentic_loop(self, system: str, initial_content: list, parser) -> dict:
+        """Generic tool-use loop: runs up to 10 rounds of tool calls, returns parsed dict."""
+        messages = [{"role": "user", "content": initial_content}]
         raw_response = ""
-        for _ in range(10):  # max 10 tool call rounds
+
+        for _ in range(10):
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=2048,
-                system=SYSTEM_PROMPT,
+                system=system,
                 tools=TOOLS,
                 messages=messages,
             )
 
-            # Collect text blocks
             text_blocks = [b.text for b in response.content if hasattr(b, "text")]
             if text_blocks:
                 raw_response = text_blocks[-1]
 
-            # If no tool use, we're done
             tool_uses = [b for b in response.content if b.type == "tool_use"]
             if not tool_uses:
                 break
 
-            # Add assistant message with tool use
             messages.append({"role": "assistant", "content": response.content})
-
-            # Execute tool calls and add results
             tool_results = []
             for tool_use in tool_uses:
                 result = handle_tool_call(tool_use.name, tool_use.input)
@@ -101,26 +207,108 @@ class LLMClient:
                 })
             messages.append({"role": "user", "content": tool_results})
 
-        return self._parse_response(raw_response)
+        return parser(raw_response)
 
-    def _parse_response(self, raw: str) -> dict:
-        """Extract JSON from Claude's response."""
-        # Try to find JSON block in the response
-        import re
-        json_match = re.search(r"\{[\s\S]*\}", raw)
-        if json_match:
+    # ─── Parsers ──────────────────────────────────────────────────────────────
+
+    def _parse_triage_json(self, raw: str) -> dict:
+        """Extract and validate triage JSON from Claude's response."""
+        def _valid(val, t, default):
+            return val if isinstance(val, t) else default
+
+        parsed = self._extract_json(raw)
+        if not parsed:
+            return {
+                "severity": "P3",
+                "affected_module": "unknown",
+                "technical_summary": raw[:500] if raw else "Could not parse triage result.",
+                "suggested_files": [],
+                "confidence_score": 0.5,
+                "reasoning_chain": [],
+            }
+
+        return {
+            "severity": parsed.get("severity", "P3") if parsed.get("severity") in ("P1", "P2", "P3", "P4") else "P3",
+            "affected_module": _valid(parsed.get("affected_module"), str, "unknown"),
+            "technical_summary": _valid(parsed.get("technical_summary"), str, ""),
+            "suggested_files": _valid(parsed.get("suggested_files"), list, []),
+            "confidence_score": float(parsed.get("confidence_score", 0.5)),
+            "reasoning_chain": _valid(parsed.get("reasoning_chain"), list, []),
+        }
+
+    def _parse_qa_json(self, raw: str) -> dict:
+        """Extract and validate QA scope JSON."""
+        parsed = self._extract_json(raw)
+        if not parsed:
+            return {
+                "reproduced": False,
+                "failing_tests": [],
+                "new_tests_created": [],
+                "test_evidence_summary": raw[:300] if raw else "Could not parse QA result.",
+                "coverage_files": [],
+            }
+        return {
+            "reproduced": bool(parsed.get("reproduced", False)),
+            "failing_tests": parsed.get("failing_tests", []) if isinstance(parsed.get("failing_tests"), list) else [],
+            "new_tests_created": parsed.get("new_tests_created", []) if isinstance(parsed.get("new_tests_created"), list) else [],
+            "test_evidence_summary": str(parsed.get("test_evidence_summary", "")),
+            "coverage_files": parsed.get("coverage_files", []) if isinstance(parsed.get("coverage_files"), list) else [],
+        }
+
+    def _parse_fix_json(self, raw: str) -> dict:
+        """Extract and validate fix recommendation JSON."""
+        parsed = self._extract_json(raw)
+        if not parsed:
+            return {
+                "proposed_fix_summary": raw[:300] if raw else "Could not parse fix result.",
+                "proposed_files": [],
+                "risk_level": "medium",
+                "post_fix_test_result": "",
+                "code_snippet": "",
+            }
+        return {
+            "proposed_fix_summary": str(parsed.get("proposed_fix_summary", "")),
+            "proposed_files": parsed.get("proposed_files", []) if isinstance(parsed.get("proposed_files"), list) else [],
+            "risk_level": parsed.get("risk_level", "medium") if parsed.get("risk_level") in ("low", "medium", "high") else "medium",
+            "post_fix_test_result": str(parsed.get("post_fix_test_result", "")),
+            "code_snippet": str(parsed.get("code_snippet", "")),
+        }
+
+    def _extract_json(self, raw: str) -> dict | None:
+        """Extract the best JSON object from Claude's response.
+        Priority: 1) ```json code block, 2) last {...} block, 3) first {...} block.
+        """
+        if not raw:
+            return None
+
+        # 1. Try to find a ```json ... ``` code block (most reliable)
+        code_block = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", raw)
+        if code_block:
             try:
-                return json.loads(json_match.group())
+                return json.loads(code_block.group(1))
             except json.JSONDecodeError:
                 pass
-        # Fallback defaults
-        return {
-            "severity": "P3",
-            "affected_module": "unknown",
-            "technical_summary": raw[:500] if raw else "Could not parse triage result.",
-            "suggested_files": [],
-            "confidence_score": 0.5,
-        }
+
+        # 2. Try all {...} matches, prefer the LAST one (Claude puts JSON at end)
+        candidates = list(re.finditer(r"\{[\s\S]*?\}", raw))
+        for match in reversed(candidates):
+            try:
+                parsed = json.loads(match.group())
+                # Must look like a triage/qa/fix response (has at least one known key)
+                if any(k in parsed for k in ("severity", "reasoning_chain", "reproduced", "proposed_fix_summary")):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+
+        # 3. Fallback: greedy match from first { to last }
+        greedy = re.search(r"\{[\s\S]*\}", raw)
+        if greedy:
+            try:
+                return json.loads(greedy.group())
+            except json.JSONDecodeError:
+                pass
+
+        return None
 
 
 # Singleton — re-used across requests

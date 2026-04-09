@@ -5,6 +5,7 @@ from enum import Enum
 class IncidentStatus(str, Enum):
     RECEIVED = "received"
     TRIAGING = "triaging"
+    DEDUPLICATED = "deduplicated"   # Linked to existing ticket, no new card created
     TICKETED = "ticketed"
     NOTIFIED = "notified"
     RESOLVED = "resolved"
@@ -49,6 +50,8 @@ class TicketStatus(str, Enum):
 class ObservabilityStage(str, Enum):
     INGEST = "ingest"
     TRIAGE = "triage"
+    QA_SCOPE = "qa_scope"
+    FIX_RECOMMENDATION = "fix_recommendation"
     TICKET = "ticket"
     NOTIFY = "notify"
     RESOLVED = "resolved"
@@ -57,3 +60,5 @@ class ObservabilityStage(str, Enum):
 class EventStatus(str, Enum):
     SUCCESS = "success"
     ERROR = "error"
+    DEDUPLICATED = "deduplicated"   # Ticket skipped — linked to existing
+    SKIPPED = "skipped"

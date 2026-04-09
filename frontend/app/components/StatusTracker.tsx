@@ -4,20 +4,25 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 interface StatusTrackerProps {
+  incidentId: number;
   traceId: string;
   onReset: () => void;
 }
 
 interface IncidentStatus {
-  status: 'received' | 'triaging' | 'ticketed' | 'notified' | 'resolved';
-  severity?: string;
-  ticket_id?: string;
-  ticket_url?: string;
+  incident_id: number;
   trace_id: string;
-  triage_summary?: string;
+  title: string;
+  status: 'received' | 'triaging' | 'ticketed' | 'notified' | 'resolved' | 'deduplicated';
+  severity?: string;
   affected_module?: string;
-  suggested_files?: string[];
   confidence_score?: number;
+  technical_summary?: string;
+  suggested_files?: string[];
+  trello_card_id?: string;
+  trello_card_url?: string;
+  deduplicated?: boolean;
+  linked_ticket_id?: number;
 }
 
 const SEVERITY_CONFIG: Record<string, { label: string; bg: string; text: string; ring: string }> = {
@@ -38,7 +43,7 @@ const STATUS_STAGES = [
     key: 'triaging',
     label: 'AI Triage',
     icon: '🤖',
-    activeDescription: 'Claude claude-sonnet-4-6 is analyzing your report and searching the Medusa.js codebase...',
+    activeDescription: 'Claude is analyzing your report and searching the Medusa.js codebase...',
   },
   {
     key: 'ticketed',
@@ -60,7 +65,9 @@ const STATUS_STAGES = [
   },
 ];
 
-export default function StatusTracker({ traceId, onReset }: StatusTrackerProps) {
+const TERMINAL_STATUSES = ['notified', 'resolved', 'deduplicated'];
+
+export default function StatusTracker({ incidentId, traceId, onReset }: StatusTrackerProps) {
   const [status, setStatus] = useState<IncidentStatus | null>(null);
   const [isPolling, setIsPolling] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +78,12 @@ export default function StatusTracker({ traceId, onReset }: StatusTrackerProps) 
 
     const poll = async () => {
       try {
-        const response = await axios.get(`/api/incidents/${traceId}`, { timeout: 5000 });
+        const response = await axios.get(`/api/incidents/${incidentId}`, { timeout: 5000 });
         setStatus(response.data);
         setError(null);
-        if (response.data.status === 'resolved') setIsPolling(false);
+        if (TERMINAL_STATUSES.includes(response.data.status)) {
+          setIsPolling(false);
+        }
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to fetch status');
       }
@@ -84,10 +93,14 @@ export default function StatusTracker({ traceId, onReset }: StatusTrackerProps) 
     if (isPolling) pollInterval = setInterval(poll, 5000);
 
     return () => { if (pollInterval) clearInterval(pollInterval); };
-  }, [traceId, isPolling]);
+  }, [incidentId, isPolling]);
 
-  const currentStageIndex = status
-    ? STATUS_STAGES.findIndex(s => s.key === status.status)
+  const isDeduplicated = status?.status === 'deduplicated' || status?.deduplicated;
+
+  // For deduplicated, show as "ticketed" stage (already has a ticket)
+  const effectiveStatus = isDeduplicated ? 'ticketed' : status?.status;
+  const currentStageIndex = effectiveStatus
+    ? STATUS_STAGES.findIndex(s => s.key === effectiveStatus)
     : -1;
 
   const handleCopyTraceId = async () => {
@@ -101,8 +114,8 @@ export default function StatusTracker({ traceId, onReset }: StatusTrackerProps) 
   };
 
   const severityConfig = status?.severity ? SEVERITY_CONFIG[status.severity] : null;
-  const trelloUrl = status?.ticket_url
-    || (status?.ticket_id ? `https://trello.com/c/${status.ticket_id}` : null);
+  const trelloUrl = status?.trello_card_url
+    || (status?.trello_card_id ? `https://trello.com/c/${status.trello_card_id}` : null);
 
   return (
     <div className="space-y-8">
@@ -121,6 +134,17 @@ export default function StatusTracker({ traceId, onReset }: StatusTrackerProps) 
         <code className="font-mono text-sm text-slate-900 break-all">{traceId}</code>
         <p className="text-xs text-slate-500 mt-2">Use this ID to track your incident across all systems</p>
       </div>
+
+      {/* Deduplicated banner */}
+      {isDeduplicated && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <p className="text-sm font-semibold text-amber-900">Duplicate Detected</p>
+          <p className="text-xs text-amber-700 mt-1">
+            This incident matches an existing open ticket.
+            {status?.linked_ticket_id && ` Linked to ticket #${status.linked_ticket_id}.`}
+          </p>
+        </div>
+      )}
 
       {/* Severity badge — visible as soon as triage completes */}
       {severityConfig && (
@@ -184,14 +208,14 @@ export default function StatusTracker({ traceId, onReset }: StatusTrackerProps) 
       </div>
 
       {/* AI Triage Analysis — expandable */}
-      {status?.triage_summary && (
+      {status?.technical_summary && (
         <details className="group bg-blue-50 border border-blue-200 rounded-lg">
           <summary className="px-4 py-3 cursor-pointer text-sm font-semibold text-blue-900 flex items-center justify-between list-none select-none">
             <span>🤖 AI Triage Analysis</span>
             <span className="text-blue-400 group-open:rotate-180 transition-transform">&#9660;</span>
           </summary>
           <div className="px-4 pb-4 space-y-3 border-t border-blue-200 pt-3">
-            <p className="text-sm text-blue-800">{status.triage_summary}</p>
+            <p className="text-sm text-blue-800">{status.technical_summary}</p>
             {status.suggested_files && status.suggested_files.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-blue-700 mb-1">Suggested files to investigate:</p>
@@ -209,12 +233,12 @@ export default function StatusTracker({ traceId, onReset }: StatusTrackerProps) 
       )}
 
       {/* Trello card link */}
-      {(status?.ticket_id || trelloUrl) && (
+      {(status?.trello_card_id || trelloUrl) && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-green-900">Trello Card Created</p>
-            {status?.ticket_id && (
-              <p className="text-xs text-green-700 font-mono mt-0.5">{status.ticket_id}</p>
+            {status?.trello_card_id && (
+              <p className="text-xs text-green-700 font-mono mt-0.5">{status.trello_card_id}</p>
             )}
           </div>
           {trelloUrl && (
@@ -235,7 +259,7 @@ export default function StatusTracker({ traceId, onReset }: StatusTrackerProps) 
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
           <span className="font-medium">Status:</span>{' '}
           <span className="font-mono">{status.status.replace(/_/g, ' ').toUpperCase()}</span>
-          {isPolling && status.status !== 'resolved' && (
+          {isPolling && !TERMINAL_STATUSES.includes(status.status) && (
             <span className="ml-2 text-xs text-slate-400">(checking every 5s)</span>
           )}
         </div>

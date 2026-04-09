@@ -17,7 +17,7 @@ Get the SRE Incident Intake & Triage Agent running in under 5 minutes.
 ### 1. Clone the repository
 ```bash
 git clone <repo-url>
-cd sre-triage-agent
+cd qa-multiagent
 ```
 
 ### 2. Configure environment

@@ -11,10 +11,12 @@ type IncidentState = 'form' | 'tracking';
 export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('incident');
   const [incidentState, setIncidentState] = useState<IncidentState>('form');
+  const [incidentId, setIncidentId] = useState<number | null>(null);
   const [traceId, setTraceId] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
 
-  const handleFormSubmit = (newTraceId: string) => {
+  const handleFormSubmit = (newIncidentId: number, newTraceId: string) => {
+    setIncidentId(newIncidentId);
     setTraceId(newTraceId);
     setIncidentState('tracking');
     setInlineError(null);
@@ -26,6 +28,7 @@ export default function Home() {
 
   const handleReset = () => {
     setIncidentState('form');
+    setIncidentId(null);
     setTraceId(null);
     setInlineError(null);
   };
@@ -85,8 +88,8 @@ export default function Home() {
                 inlineError={inlineError}
               />
             )}
-            {incidentState === 'tracking' && traceId && (
-              <StatusTracker traceId={traceId} onReset={handleReset} />
+            {incidentState === 'tracking' && incidentId && traceId && (
+              <StatusTracker incidentId={incidentId} traceId={traceId} onReset={handleReset} />
             )}
           </div>
 
