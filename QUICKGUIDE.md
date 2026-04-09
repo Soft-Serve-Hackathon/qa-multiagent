@@ -8,7 +8,7 @@ Get the SRE Incident Intake & Triage Agent running in under 5 minutes.
 
 - Docker + Docker Compose v2.0+
 - Git
-- API credentials (or use mock mode — see below)
+- API credentials (or use mock mode — no credentials needed)
 
 ---
 
@@ -17,7 +17,7 @@ Get the SRE Incident Intake & Triage Agent running in under 5 minutes.
 ### 1. Clone the repository
 ```bash
 git clone <repo-url>
-cd sre-triage-agent
+cd qa-multiagent
 ```
 
 ### 2. Configure environment
@@ -46,23 +46,26 @@ SENDGRID_API_KEY=SG...
 MOCK_EMAIL=false
 ```
 
-> **No credentials?** Set `MOCK_INTEGRATIONS=true` to run the full pipeline without real API calls. All external calls return realistic simulated responses.
+> **No credentials?** Set `MOCK_INTEGRATIONS=true` to run the full pipeline without real API calls. All external calls return realistic simulated responses — perfect for the demo.
 
 ### 3. Build and start
 ```bash
 docker compose up --build
 ```
 
-First run clones Medusa.js (e-commerce reference repo) — may take 2-3 minutes.
+> First run clones Medusa.js (e-commerce reference repo) — may take 2-3 minutes.
 
 ### 4. Open the application
-```
-http://localhost:3000
-```
+
+| URL | What |
+|---|---|
+| `http://localhost:3000` | Incident submission form |
+| `http://localhost:3000/dashboard` | Live observability dashboard |
+| `http://localhost:8000/docs` | Backend API (FastAPI Swagger) |
 
 ### 5. Submit a test incident
 
-Fill in the form:
+Fill in the form at `http://localhost:3000`:
 - **Title:** `Checkout fails with 500 error`
 - **Description:** `Users cannot complete purchase. Error appears after adding items to cart and clicking "Proceed to checkout".`
 - **Your email:** `your@email.com`
@@ -74,59 +77,90 @@ Click **Submit Report**.
 
 ## Expected Result
 
-Within ~60 seconds of submitting:
+Within ~30 seconds of submitting:
 
 | What | Where |
 |---|---|
 | Immediate response in UI | Trace ID displayed + "You will be notified by email" |
+| AI reasoning visible | Chain-of-thought steps in triage result |
 | Trello card created | Board → "To Do" column with `[P2] Checkout fails...` |
 | Slack notification | #incidents channel with severity + card link |
-| Email confirmation | reporter's inbox with card reference |
-| Observability trace | `http://localhost:3000/api/observability/events` |
+| Email confirmation | Reporter's inbox with card reference |
+| Dashboard updated | `http://localhost:3000/dashboard` — new incident visible |
+| Observability trace | `http://localhost:8000/api/observability/events` |
 
 ---
 
-## Running in Mock Mode (no real credentials needed)
+## Running in Mock Mode (no credentials needed)
 
 Set in `.env`:
 ```bash
 MOCK_INTEGRATIONS=true
 ```
 
-The pipeline runs completely. All external calls (Trello, Slack, Email) return simulated responses. Logs clearly show `"mock": true` in each event. Useful for testing the pipeline without credentials or in CI environments.
+The pipeline runs completely end-to-end. All external calls (Trello, Slack, Email) return realistic simulated responses. Logs clearly show `"mock": true` in each event. Perfect for testing without credentials or in CI.
+
+---
+
+## Testing Deduplication
+
+Submit two similar incidents (same module, similar title):
+
+```bash
+# First incident
+curl -X POST http://localhost:8000/api/incidents \
+  -F "title=Database connection pool exhausted" \
+  -F "description=DB pool at capacity, new connections timing out" \
+  -F "reporter_email=engineer@company.com"
+
+# Wait a few seconds, then submit a similar one
+curl -X POST http://localhost:8000/api/incidents \
+  -F "title=DB pool full, connections failing" \
+  -F "description=Cannot open new DB connections, pool exhausted" \
+  -F "reporter_email=engineer2@company.com"
+```
+
+The second incident will appear as `status=deduplicated` in the dashboard and API — linked to the first ticket, no duplicate Trello card created.
 
 ---
 
 ## Verifying Observability
 
-After submitting an incident, check the trace:
+After submitting an incident, check the full trace:
 
 ```bash
-# Get the trace_id from the UI response, then:
-curl "http://localhost:3000/api/observability/events?trace_id=YOUR_TRACE_ID"
+# Get the trace_id from the UI, then:
+curl "http://localhost:8000/api/observability/events?trace_id=YOUR_TRACE_ID"
+
+# View all recent events (last 20):
+curl "http://localhost:8000/api/observability/events?limit=20"
+
+# Filter by pipeline stage:
+curl "http://localhost:8000/api/observability/events?stage=triage"
 ```
 
-You should see 4-5 events: `ingest → triage → ticket → notify → (resolved)`
+Expected: 4–5 events (`ingest → triage → ticket → notify → resolved`) all sharing the same `trace_id`.
 
-Or view all recent events:
-```bash
-curl "http://localhost:3000/api/observability/events?limit=20"
-```
+Or open the live dashboard: `http://localhost:3000/dashboard`
 
 ---
 
-## Running the E2E Smoke Test
+## Running the Load Test (50 concurrent incidents)
 
 ```bash
-# With the app running:
-docker compose exec app python tests/e2e_smoke.py
+# Install dependencies (once):
+pip install httpx click
+
+# Run with mock mode (no credentials needed):
+python scripts/load_test_50_incidents.py --mock --incidents 50
+
+# Expected output:
+# ✅ Submitted: 50/50
+# 📊 Throughput: ~242 incidents/sec
+# ✅ All tickets created in ~2s
 ```
 
-This script:
-1. Submits a test incident via POST /api/incidents
-2. Verifies HTTP 201 + trace_id
-3. Verifies GET /api/observability/events returns ≥4 events with the same trace_id
-4. Verifies GET /api/incidents/:id shows status=notified
+See [scripts/README.md](scripts/README.md) for full usage.
 
 ---
 
@@ -134,18 +168,20 @@ This script:
 
 ```bash
 # All agent logs in real time:
-docker compose logs -f
+docker compose logs -f backend
 
 # Or read the persistent log file:
 cat logs/agent.log
 ```
+
+Each log line is structured JSON: `timestamp`, `level`, `logger`, `message`.
 
 ---
 
 ## Health Check
 
 ```bash
-curl http://localhost:3000/api/health
+curl http://localhost:8000/api/health
 ```
 
 Expected:
@@ -155,7 +191,7 @@ Expected:
   "version": "1.0.0",
   "uptime_seconds": 42,
   "database": "connected",
-  "mock_mode": false
+  "mock_mode": true
 }
 ```
 
@@ -169,8 +205,8 @@ Expected:
 | `ANTHROPIC_API_KEY` error | Key not set or invalid | Verify key in `.env` — get one at console.anthropic.com |
 | Trello card not created | Wrong `TRELLO_LIST_ID` or invalid token | Get IDs from Trello board URL, regenerate token at trello.com/app-key |
 | Slack message not sent | Invalid webhook URL | Create a new webhook at api.slack.com/apps |
-| Port 3000 already in use | Another service on that port | Change `APP_PORT=3001` in `.env` |
-| `/api/health` returns 500 | Database not initialized | `docker compose down -v && docker compose up --build` |
+| Port 3000 or 8000 in use | Another service on that port | Change `APP_PORT` in `.env` and update `docker-compose.yml` |
+| Database column error on startup | Old DB from previous version | Run: `docker compose down -v && docker compose up --build` |
 
 ---
 

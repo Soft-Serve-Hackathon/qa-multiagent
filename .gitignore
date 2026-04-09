@@ -57,5 +57,6 @@ htmlcov/
 
 # Project specific
 hackathon/
+develop/
 tasks/done/
 *.auxlock

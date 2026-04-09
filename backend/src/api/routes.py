@@ -13,11 +13,16 @@ from sqlalchemy import desc
 
 from ..agents.ingest_agent import IngestAgent
 from .models import (
+    DashboardStatsResponse,
     ErrorResponse,
     IncidentCreatedResponse,
     IncidentStatusResponse,
+    ModuleCount,
     ObservabilityEventResponse,
     ObservabilityEventsListResponse,
+    RecentIncident,
+    SeverityBreakdown,
+    StatusBreakdown,
 )
 from ..infrastructure.database import (
     IncidentModel,
@@ -199,3 +204,127 @@ def get_observability_events(
     ]
 
     return ObservabilityEventsListResponse(events=events, total=total)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/dashboard/stats
+# ---------------------------------------------------------------------------
+
+@router.get("/dashboard/stats", response_model=DashboardStatsResponse)
+def get_dashboard_stats():
+    """
+    Aggregated statistics for the observability dashboard.
+    Returns incident counts, severity/module breakdowns, latency averages,
+    deduplication rate, and the 20 most recent incidents.
+    """
+    from collections import Counter, defaultdict
+
+    with get_db() as db:
+        # ── Total incidents ────────────────────────────────────────────────
+        total = db.query(IncidentModel).count()
+
+        # ── Status breakdown ───────────────────────────────────────────────
+        status_rows = db.query(IncidentModel.status).all()
+        status_counts: dict[str, int] = Counter(r.status for r in status_rows)
+
+        # ── Severity breakdown (from triage results) ───────────────────────
+        sev_rows = db.query(TriageResultModel.severity).all()
+        sev_counts: dict[str, int] = Counter(r.severity for r in sev_rows)
+
+        # ── Top modules ────────────────────────────────────────────────────
+        mod_rows = db.query(TriageResultModel.affected_module).all()
+        mod_counts: dict[str, int] = Counter(r.affected_module for r in mod_rows)
+        top_modules = [
+            ModuleCount(module=m, count=c)
+            for m, c in sorted(mod_counts.items(), key=lambda x: -x[1])
+        ][:6]
+
+        # ── Avg latency from observability events ──────────────────────────
+        triage_events = (
+            db.query(ObservabilityEventModel.duration_ms)
+            .filter(ObservabilityEventModel.stage == "triage")
+            .filter(ObservabilityEventModel.status == "success")
+            .all()
+        )
+        ticket_events = (
+            db.query(ObservabilityEventModel.duration_ms)
+            .filter(ObservabilityEventModel.stage == "ticket")
+            .filter(ObservabilityEventModel.status == "success")
+            .all()
+        )
+        avg_triage = (
+            sum(r.duration_ms for r in triage_events) / len(triage_events)
+            if triage_events else None
+        )
+        avg_ticket = (
+            sum(r.duration_ms for r in ticket_events) / len(ticket_events)
+            if ticket_events else None
+        )
+
+        # ── Deduplication rate ─────────────────────────────────────────────
+        dedup_count = status_counts.get("deduplicated", 0)
+        dedup_rate = (dedup_count / total) if total > 0 else 0.0
+
+        # ── Pipeline success rate (reached notified or resolved) ───────────
+        success_count = status_counts.get("notified", 0) + status_counts.get("resolved", 0)
+        pipeline_success_rate = (success_count / total) if total > 0 else 0.0
+
+        # ── Recent incidents (last 20) ─────────────────────────────────────
+        recent_rows = (
+            db.query(IncidentModel)
+            .order_by(desc(IncidentModel.created_at))
+            .limit(20)
+            .all()
+        )
+
+        recent_incidents = []
+        for inc in recent_rows:
+            triage = (
+                db.query(TriageResultModel)
+                .filter(TriageResultModel.incident_id == inc.id)
+                .first()
+            )
+            ticket = (
+                db.query(TicketModel)
+                .filter(TicketModel.incident_id == inc.id)
+                .first()
+            )
+            recent_incidents.append(
+                RecentIncident(
+                    incident_id=inc.id,
+                    trace_id=inc.trace_id,
+                    title=inc.title,
+                    status=inc.status,
+                    severity=triage.severity if triage else None,
+                    affected_module=triage.affected_module if triage else None,
+                    confidence_score=triage.confidence_score if triage else None,
+                    ticket_id=ticket.trello_card_id if ticket else None,
+                    ticket_url=ticket.trello_card_url if ticket else None,
+                    deduplicated=(inc.status == "deduplicated"),
+                    created_at=inc.created_at,
+                )
+            )
+
+    return DashboardStatsResponse(
+        total_incidents=total,
+        severity_breakdown=SeverityBreakdown(
+            P1=sev_counts.get("P1", 0),
+            P2=sev_counts.get("P2", 0),
+            P3=sev_counts.get("P3", 0),
+            P4=sev_counts.get("P4", 0),
+        ),
+        status_breakdown=StatusBreakdown(
+            received=status_counts.get("received", 0),
+            triaging=status_counts.get("triaging", 0),
+            deduplicated=status_counts.get("deduplicated", 0),
+            ticketed=status_counts.get("ticketed", 0),
+            notified=status_counts.get("notified", 0),
+            resolved=status_counts.get("resolved", 0),
+        ),
+        top_modules=top_modules,
+        avg_triage_ms=avg_triage,
+        avg_ticket_ms=avg_ticket,
+        deduplication_rate=round(dedup_rate, 3),
+        recent_incidents=recent_incidents,
+        pipeline_success_rate=round(pipeline_success_rate, 3),
+    )

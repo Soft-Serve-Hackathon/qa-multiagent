@@ -28,6 +28,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
 # Non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
@@ -41,7 +42,7 @@ USER nextjs
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=15s \
-    CMD wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=30s \
+    CMD wget --quiet --tries=1 --spider http://127.0.0.1:3000 || exit 1
 
 CMD ["node", "server.js"]
