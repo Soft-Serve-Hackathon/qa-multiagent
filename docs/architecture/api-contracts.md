@@ -12,23 +12,23 @@
 http://localhost:8000
 ```
 
-El backend (FastAPI) corre en el puerto 8000. El frontend (Next.js) corre en el puerto 3000 y hace proxy de `/api/*` → `http://localhost:8000/api/*` via rewrites.
+The backend (FastAPI) runs on port 8000. The frontend (Next.js) runs on port 3000 and proxies `/api/*` → `http://localhost:8000/api/*` via rewrites.
 
 ---
 
 ## Endpoints
 
 ### POST /api/incidents
-**Descripción:** Ingesta un reporte de incidente. Inicia el pipeline de triage en background.  
+**Description:** Ingests an incident report. Starts the triage pipeline in the background.  
 **Content-Type:** `multipart/form-data`
 
 **Request fields:**
 
-| Campo | Tipo | Requerido | Validaciones |
+| Field | Type | Required | Validation |
 |---|---|---|---|
-| `title` | string | Sí | max 200 chars |
-| `description` | string | Sí | max 2000 chars (truncado si excede) |
-| `reporter_email` | string | Sí | formato email válido |
+| `title` | string | Yes | max 200 chars |
+| `description` | string | Yes | max 2000 chars (truncated if exceeded) |
+| `reporter_email` | string | Yes | valid email format |
 | `attachment` | file | No | PNG, JPG, TXT, LOG — max 10MB |
 
 **Response 201 — Success:**

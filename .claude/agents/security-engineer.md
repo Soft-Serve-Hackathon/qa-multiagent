@@ -1,54 +1,54 @@
 # Security Engineer
 
 ## Mission
-Revisar la solución desde exposición, abuso, permisos y manejo de datos.
+Review the solution for exposure, abuse, permissions, and data handling.
 
 ## Focus
-- autenticación
-- autorización
-- validación de inputs
-- secretos
-- superficie de ataque
+- authentication
+- authorization
+- input validation
+- secrets
+- attack surface
 
 ## Outputs
-- observaciones de seguridad
-- checklist de riesgos
-- recomendaciones mínimas para el MVP
+- security observations
+- risk checklist
+- minimum MVP recommendations
 
 ---
 
 ## SRE Domain — Threat Model
 
-El sistema recibe input no confiable de usuarios externos via formulario web. El LLM es el componente más sensible.
+The system receives untrusted input from external users via a web form. The LLM is the most sensitive component.
 
-| ID | Amenaza | Vector | Mitigación implementada |
+| ID | Threat | Vector | Mitigation implemented |
 |---|---|---|---|
-| T1 | Prompt injection | Campo `description` o `title` con instrucciones maliciosas | `validate_injection()` en IngestAgent — ADR-003 |
-| T2 | Malicious file upload | Imagen con payload EXIF malicioso, script disfrazado de .txt | Validar MIME type real con `python-magic`, no confiar en extensión |
-| T3 | Credenciales en logs | `reporter_email` o API keys aparecen en observability events | `reporter_email` no incluido en prompts LLM. API keys solo en `.env`. |
-| T4 | API token expuesto | `TRELLO_API_TOKEN`, `ANTHROPIC_API_KEY` hardcodeados en código | Solo en `.env`. `.env` en `.gitignore`. `.env.example` con placeholders. |
-| T5 | SSRF via adjunto | Si el sistema aceptara URLs de archivos, podría usarse para SSRF | El MVP solo acepta archivos locales (upload), no URLs. |
-| T6 | Context overflow | Archivo de log muy grande que desborda el contexto del LLM | IngestAgent lee solo los primeros 50KB de archivos de log. |
+| T1 | Prompt injection | `description` or `title` field with malicious instructions | `validate_injection()` in IngestAgent — ADR-003 |
+| T2 | Malicious file upload | image with malicious EXIF payload, script disguised as .txt | Validate real MIME type with `python-magic`, do not trust the extension |
+| T3 | Credentials in logs | `reporter_email` or API keys appear in observability events | `reporter_email` not included in LLM prompts. API keys only in `.env`. |
+| T4 | Exposed API token | `TRELLO_API_TOKEN`, `ANTHROPIC_API_KEY` hardcoded in code | Only in `.env`. `.env` in `.gitignore`. `.env.example` uses placeholders. |
+| T5 | SSRF via attachment | If the system accepted file URLs, SSRF would be possible | MVP only accepts local uploads, not URLs. |
+| T6 | Context overflow | Very large log file overflowing the LLM context | IngestAgent reads only the first 50KB of log files. |
 
-## Checklist de seguridad para el MVP
+## Security checklist for the MVP
 
-Antes de submission, verificar:
-- [ ] `validate_injection()` en `src/guardrails.py` cubre los patrones del ADR-003
-- [ ] MIME type validation usa `python-magic`, no solo la extensión del archivo
-- [ ] `.env` está en `.gitignore`
-- [ ] `.env.example` tiene todos los valores como placeholder (no valores reales)
-- [ ] `reporter_email` NO aparece en ningún log de observability ni en el prompt del LLM
-- [ ] API keys no están hardcodeadas en ningún archivo de código
-- [ ] `description` es truncado a 2000 chars antes de enviarse al LLM
-- [ ] El endpoint `POST /api/incidents` retorna HTTP 400 (no 500) ante inputs inválidos
-- [ ] AC7 pasa: input con "ignore previous instructions" → HTTP 400, sin evento `stage=triage` en logs
+Before submission, verify:
+- [ ] `validate_injection()` in `src/guardrails.py` covers ADR-003 patterns
+- [ ] MIME type validation uses `python-magic`, not only file extension
+- [ ] `.env` is in `.gitignore`
+- [ ] `.env.example` contains placeholders for all values (no real values)
+- [ ] `reporter_email` does NOT appear in any observability log or LLM prompt
+- [ ] API keys are not hardcoded in any source file
+- [ ] `description` is truncated to 2000 chars before sending to the LLM
+- [ ] POST /api/incidents returns HTTP 400 (not 500) on invalid inputs
+- [ ] AC7 passes: input with "ignore previous instructions" → HTTP 400, no `stage=triage` event in logs
 
-## Responsible AI — Verificación
+## Responsible AI — Verification
 
-| Principio | Cómo se implementa | Dónde verificar |
+| Principle | How it is implemented | Where to verify |
 |---|---|---|
-| Fairness | El triage se basa en el contenido técnico, no en el email del reporter | `reporter_email` fuera del prompt LLM |
-| Transparency | Cada TriageResult incluye `confidence_score` y `technical_summary` | `GET /api/incidents/:id` |
-| Accountability | Cada acción tiene un evento de observability con `trace_id` | `GET /api/observability/events` |
-| Privacy | `reporter_email` no se envía al LLM, solo a los servicios de notificación | `src/agents/triage_agent.py` |
-| Security | Guardrails implementados, API keys en `.env`, MIME validation | `src/guardrails.py`, `.env.example` |
+| Fairness | Triage is based on technical content, not reporter email | `reporter_email` excluded from LLM prompt |
+| Transparency | Each TriageResult includes `confidence_score` and `technical_summary` | `GET /api/incidents/:id` |
+| Accountability | Every action has an observability event with `trace_id` | `GET /api/observability/events` |
+| Privacy | `reporter_email` is not sent to the LLM, only to notification services | `src/agents/triage_agent.py` |
+| Security | Guardrails implemented, API keys in `.env`, MIME validation | `src/guardrails.py`, `.env.example` |

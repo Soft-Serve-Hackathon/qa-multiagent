@@ -1,11 +1,11 @@
 # Definition of Done
 
-Una tarea se considera terminada cuando:
+A task is considered complete when:
 
-- existe contexto suficiente
-- la implementación respeta la spec
-- los criterios de aceptación aplicables están cubiertos
-- existe validación ejecutada o evidencia documentada
-- riesgos remanentes están escritos
-- el handoff al siguiente rol está listo
-- la documentación afectada fue actualizada
+- there is sufficient context
+- the implementation respects the spec
+- applicable acceptance criteria are covered
+- validation has been executed or evidence is documented
+- remaining risks are documented
+- handoff to the next role is ready
+- affected documentation has been updated

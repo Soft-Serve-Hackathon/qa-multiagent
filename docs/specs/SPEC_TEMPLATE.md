@@ -1,22 +1,22 @@
 # Feature Spec
 
 ## 1. Summary
-Describe qué problema se quiere resolver y por qué importa.
+Describe what problem is being solved and why it matters.
 
 ## 2. Problem Statement
-Cuál es el dolor actual y a quién afecta.
+Describe the current pain and who is affected.
 
 ## 3. Target Users
-Quién usa esto y en qué contexto.
+Who uses this and in what context.
 
 ## 4. Goals
-Qué resultados debe lograr esta feature.
+What outcomes this feature should achieve.
 
 ## 5. Non-Goals
-Qué queda explícitamente fuera.
+What is explicitly out of scope.
 
 ## 6. User Flow
-Paso a paso de la experiencia esperada.
+Step-by-step expected experience.
 
 ## 7. Functional Requirements
 - FR1:
@@ -29,14 +29,14 @@ Paso a paso de la experiencia esperada.
 - AC3:
 
 ## 9. Edge Cases
-- caso borde 1
-- caso borde 2
+- edge case 1
+- edge case 2
 
 ## 10. Dependencies
-Dependencias técnicas, operativas o de negocio.
+Technical, operational, or business dependencies.
 
 ## 11. Risks
-Riesgos conocidos o supuestos todavía no resueltos.
+Known risks or unresolved assumptions.
 
 ## 12. Open Questions
-Preguntas que deben resolverse antes o durante el MVP.
+Questions that must be resolved before or during the MVP.

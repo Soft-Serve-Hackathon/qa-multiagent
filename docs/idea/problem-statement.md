@@ -1,43 +1,43 @@
 # Problem Statement
 
-## Idea inicial
-Un agente SRE que convierte reportes de incidentes multimodales (texto + imagen de error + archivo de log) en tickets de Trello enriquecidos con análisis automático del codebase de la aplicación e-commerce, notifica al equipo técnico vía Slack y al reporter vía email, y cierra el ciclo cuando el incidente se resuelve.
+## Initial idea
+An SRE agent that converts multimodal incident reports (text + error image + log file) into enriched Trello tickets with automatic analysis of the e-commerce application codebase, notifies the technical team via Slack and the reporter via email, and closes the loop when the incident is resolved.
 
-## Problema principal
-En equipos de ingeniería que operan aplicaciones e-commerce, el triage manual de incidentes consume entre **15 y 45 minutos por incidente**. El ingeniero on-call debe:
+## Main problem
+In engineering teams operating e-commerce applications, manual incident triage takes between **15 and 45 minutes per incident**. The on-call engineer must:
 
-1. Leer y entender el reporte del usuario (que puede ser ambiguo o incompleto)
-2. Correlacionar el error con los logs del sistema
-3. Buscar en el codebase qué módulo o servicio podría estar afectado
-4. Crear un ticket con suficiente contexto técnico para que otro ingeniero pueda actuar
-5. Notificar manualmente al canal correcto del equipo
-6. Recordar actualizar al reporter cuando el problema se resuelve
+1. Read and understand the user report (which can be ambiguous or incomplete)
+2. Correlate the error with system logs
+3. Search the codebase for the affected module or service
+4. Create a ticket with enough technical context for another engineer to act
+5. Manually notify the correct team channel
+6. Remember to update the reporter when the issue is resolved
 
-Cada uno de estos pasos es manual, repetitivo y propenso a errores de clasificación. En e-commerce, **cada minuto de downtime tiene un costo directo en ventas perdidas y daño a la reputación de la marca**.
+Each of these steps is manual, repetitive, and prone to classification errors. In e-commerce, **every minute of downtime carries direct costs in lost sales and brand reputation damage**.
 
-## A quién le duele
+## Who is affected
 
 ### SRE on-call engineer
-El más afectado. Recibe alertas a cualquier hora, muchas veces con información incompleta. Tiene que reconstruir el contexto del problema antes de poder actuar. En incidentes de alta severidad (P1/P2), este tiempo de triage es crítico.
+The most affected. They receive alerts at any hour, often with incomplete information. They must rebuild the problem context before acting. In high-severity incidents (P1/P2), this triage time is critical.
 
-### Reporter del incidente
-Puede ser un usuario final, un developer interno o un monitor automatizado. No sabe si su reporte fue recibido, quién lo está atendiendo, ni cuándo esperar una resolución. La falta de confirmación genera ruido: reportes duplicados, escaladas innecesarias, tickets incompletos.
+### Incident reporter
+This can be an end user, an internal developer, or an automated monitor. They do not know if their report was received, who is handling it, or when to expect a resolution. The lack of confirmation creates noise: duplicate reports, unnecessary escalations, incomplete tickets.
 
 ### Engineering manager / Tech lead
-No tiene visibilidad en tiempo real del estado de incidentes activos. Los tickets en Trello suelen crearse tarde, con contexto insuficiente, o directamente no se crean si el ingeniero on-call resuelve el problema rápido pero no documenta.
+They lack real-time visibility into the status of active incidents. Trello tickets are often created late, with insufficient context, or not created at all if the on-call engineer resolves the problem quickly but does not document it.
 
-## Impacto
-Sin una solución:
-- **MTTR elevado**: el tiempo promedio de resolución se extiende por el overhead de triage manual
-- **Fatiga del equipo on-call**: tareas repetitivas de bajo valor que consumen energía cognitiva en momentos de alta presión
-- **Tickets incompletos**: sin contexto técnico suficiente, los tickets bloquean la investigación posterior
-- **Ciclo abierto**: el reporter nunca sabe que su incidente fue resuelto a menos que alguien recuerde notificarle
-- **Sin trazabilidad**: sin logs estructurados del proceso de triage, es imposible auditar qué pasó y cuándo
+## Impact
+Without a solution:
+- **High MTTR**: average resolution time increases due to manual triage overhead
+- **On-call fatigue**: low-value repetitive tasks consume cognitive energy during high-pressure moments
+- **Incomplete tickets**: without enough technical context, tickets block later investigation
+- **Open loop**: the reporter does not know their incident was resolved unless someone remembers to notify them
+- **No traceability**: without structured logs for the triage process, it is impossible to audit what happened and when
 
-## Señales de valor
-Sabremos que la solución vale la pena cuando:
-- El tiempo de triage se reduce de ~30 minutos a ~2 minutos (el agente genera el análisis y el ticket en segundos)
-- El reporter recibe confirmación automática con número de ticket dentro de los primeros 60 segundos de submitear el reporte
-- El ticket en Trello tiene suficiente contexto técnico (módulo afectado, severidad, archivos relevantes del codebase) para que un ingeniero pueda actuar sin ir y volver con el reporter
-- Los logs de observability permiten reconstruir exactamente qué hizo el agente en cada etapa del pipeline
-- El equipo on-call puede operar con MOCK_INTEGRATIONS=true en entornos sin credenciales configuradas y el sistema sigue funcionando
+## Signals of value
+We will know the solution is worthwhile when:
+- Triage time drops from ~30 minutes to ~2 minutes (the agent generates the analysis and ticket in seconds)
+- The reporter receives automatic confirmation with a ticket number within 60 seconds of submitting the report
+- The Trello ticket contains enough technical context (affected module, severity, relevant codebase files) for an engineer to act without back-and-forth with the reporter
+- Observability logs allow reconstructing exactly what the agent did at each stage of the pipeline
+- The on-call team can operate with `MOCK_INTEGRATIONS=true` in environments without configured credentials and the system still functions
