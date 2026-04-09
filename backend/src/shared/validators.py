@@ -1,97 +1,34 @@
-"""
-Validators.
-
-Input validation and guardrails for injection detection and data integrity.
-ADR-003: three-layer protection — injection detection, sanitization, MIME validation.
-"""
-
+"""Input validators — email format, field lengths, file constraints."""
 import re
-import unicodedata
-from typing import Optional
+from src.domain.exceptions import InvalidEmailError
 
-# ---------------------------------------------------------------------------
-# Layer 1 — Prompt injection detection (ADR-003)
-# ---------------------------------------------------------------------------
-
-_INJECTION_PATTERNS = re.compile(
-    r"ignore\s+(previous|all)|"
-    r"disregard|"
-    r"forget\s+your|"
-    r"new\s+instructions|"
-    r"you\s+are\s+now|"
-    r"system\s+prompt|"
-    r"jailbreak|"
-    r"\bDAN\b|"
-    r"act\s+as|"
-    r"pretend\s+you\s+are|"
-    r"reveal\s+your|"
-    r"bypass",
-    re.IGNORECASE,
-)
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 
-def validate_injection(text: str) -> bool:
-    """
-    Return True if the text is clean, False if it contains injection patterns.
-    Called on both title and description before any LLM interaction.
-    """
-    return _INJECTION_PATTERNS.search(text) is None
+def validate_email(email: str) -> str:
+    """Validate email format. Returns normalized email or raises InvalidEmailError."""
+    email = email.strip().lower()
+    if not EMAIL_REGEX.match(email):
+        raise InvalidEmailError(f"Invalid email format: {email}")
+    return email
 
 
-# ---------------------------------------------------------------------------
-# Layer 2 — Input sanitization (ADR-003)
-# ---------------------------------------------------------------------------
-
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
-
-
-def sanitize_input(text: str, max_length: int = 2000) -> str:
-    """
-    Remove control characters and truncate to max_length.
-    Does NOT remove newlines (\n) or tabs (\t) — those are valid in descriptions.
-    """
-    text = _CONTROL_CHARS.sub("", text)
-    text = text[:max_length]
-    return text
+def truncate(text: str, max_chars: int) -> str:
+    """Truncate text to max_chars. Adds '...' if truncated."""
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars - 3] + "..."
 
 
-# ---------------------------------------------------------------------------
-# Layer 3 — File / MIME validation (ADR-003)
-# ---------------------------------------------------------------------------
-
-_ALLOWED_MIMES = {"image/png", "image/jpeg", "text/plain"}
-_MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
-
-
-def validate_mime(content: bytes, declared_content_type: Optional[str] = None) -> tuple[bool, str]:
-    """
-    Validate the real MIME type of file content using python-magic.
-    Falls back to declared content-type if python-magic is unavailable.
-
-    Returns (is_valid, detected_mime).
-    """
-    try:
-        import magic
-        detected = magic.from_buffer(content[:2048], mime=True)
-    except Exception:
-        # Fallback: trust the declared content-type from the upload
-        detected = declared_content_type or "application/octet-stream"
-
-    return detected in _ALLOWED_MIMES, detected
+def validate_title(title: str) -> str:
+    title = title.strip()
+    if not title:
+        raise ValueError("Title cannot be empty.")
+    return truncate(title, 200)
 
 
-def validate_file_size(content: bytes) -> bool:
-    """Return True if file is within the 10MB limit."""
-    return len(content) <= _MAX_FILE_BYTES
-
-
-# ---------------------------------------------------------------------------
-# Email validation
-# ---------------------------------------------------------------------------
-
-_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-
-
-def validate_email(email: str) -> bool:
-    """Basic structural email validation."""
-    return bool(_EMAIL_RE.match(email))
+def validate_description(description: str) -> str:
+    description = description.strip()
+    if not description:
+        raise ValueError("Description cannot be empty.")
+    return truncate(description, 2000)

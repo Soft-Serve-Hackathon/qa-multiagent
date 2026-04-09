@@ -1,117 +1,49 @@
-"""
-Observability — Event Emitter.
-
-Central function used by every agent to emit structured JSON events.
-Contract: every event has trace_id, stage, status, duration_ms, metadata.
-The trace_id flows unchanged from IngestAgent to ResolutionWatcher.
-"""
-
+"""Observability event persistence — writes events to SQLite for the /api/observability/events endpoint."""
 import json
-import logging
 import time
 from contextlib import contextmanager
-from typing import Any, Generator, Optional
-
-from ...domain.enums import ObservabilityStage, ObservabilityStatus
-
-logger = logging.getLogger(__name__)
+from src.infrastructure.observability.logger import log_event
+from src.domain.entities import ObservabilityEvent
+from src.infrastructure.database import SessionLocal
 
 
 def emit_event(
-    *,
+    stage: str,
+    status: str,
     trace_id: str,
-    stage: ObservabilityStage,
-    status: ObservabilityStatus,
     duration_ms: int,
-    incident_id: Optional[int] = None,
-    metadata: Optional[dict[str, Any]] = None,
-) -> dict[str, Any]:
-    """
-    Persist an observability event to the database and log it as structured JSON.
-
-    Always call this — even on error paths — so the pipeline is fully traceable.
-    Never include reporter_email in metadata.
-
-    Returns the event dict (useful for testing / chaining).
-    """
-    from ...infrastructure.database import ObservabilityEventModel, get_db
-
-    meta = metadata or {}
-    event_dict = {
-        "trace_id": trace_id,
-        "stage": stage.value,
-        "incident_id": incident_id,
-        "status": status.value,
-        "duration_ms": duration_ms,
-        "metadata": meta,
-    }
-
-    # Structured log — always emitted regardless of DB success
-    logger.info(json.dumps(event_dict))
-
-    # Persist to DB
+    incident_id: int | None = None,
+    metadata: dict | None = None,
+) -> None:
+    """Persist an observability event to SQLite and emit to log."""
+    log_event(stage, status, trace_id, duration_ms, incident_id, metadata)
+    db = SessionLocal()
     try:
-        with get_db() as db:
-            record = ObservabilityEventModel(
-                trace_id=trace_id,
-                stage=stage.value,
-                incident_id=incident_id,
-                status=status.value,
-                duration_ms=duration_ms,
-                event_metadata=json.dumps(meta),
-            )
-            db.add(record)
-    except Exception as exc:
-        # Never let observability failures crash the pipeline
-        logger.error(
-            json.dumps({
-                "observability_error": str(exc),
-                "trace_id": trace_id,
-                "stage": stage.value,
-            })
+        event = ObservabilityEvent(
+            trace_id=trace_id,
+            stage=stage,
+            incident_id=incident_id,
+            status=status,
+            duration_ms=duration_ms,
+            event_metadata=json.dumps(metadata or {}),
         )
-
-    return event_dict
+        db.add(event)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 @contextmanager
-def timed_stage(
-    trace_id: str,
-    stage: ObservabilityStage,
-    incident_id: Optional[int] = None,
-    extra_metadata: Optional[dict[str, Any]] = None,
-) -> Generator[dict[str, Any], None, None]:
-    """
-    Context manager that automatically emits a success or error event
-    with the elapsed duration.
-
-    Usage:
-        with timed_stage(trace_id, ObservabilityStage.INGEST, incident_id=42) as meta:
-            meta["attachment_type"] = "image"
-            # ... do work ...
-    """
-    meta: dict[str, Any] = extra_metadata.copy() if extra_metadata else {}
+def timed_stage(stage: str, trace_id: str, incident_id: int | None = None, metadata: dict | None = None):
+    """Context manager that automatically times a stage and emits its event."""
     start = time.monotonic()
     try:
-        yield meta
+        yield
         duration_ms = int((time.monotonic() - start) * 1000)
-        emit_event(
-            trace_id=trace_id,
-            stage=stage,
-            status=ObservabilityStatus.SUCCESS,
-            duration_ms=duration_ms,
-            incident_id=incident_id,
-            metadata=meta,
-        )
+        emit_event(stage, "success", trace_id, duration_ms, incident_id, metadata)
     except Exception as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
-        meta["error"] = str(exc)
-        emit_event(
-            trace_id=trace_id,
-            stage=stage,
-            status=ObservabilityStatus.ERROR,
-            duration_ms=duration_ms,
-            incident_id=incident_id,
-            metadata=meta,
-        )
+        emit_event(stage, "error", trace_id, duration_ms, incident_id, {**(metadata or {}), "error": str(exc)})
         raise

@@ -1,58 +1,57 @@
-"""
-Configuration management for the application.
+"""Application configuration — loaded from environment variables via python-dotenv."""
+import os
+from dotenv import load_dotenv
 
-Handles environment variables, database settings, and API credentials.
-"""
-
-from functools import lru_cache
-from pydantic_settings import BaseSettings, SettingsConfigDict
+load_dotenv()
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
-    # Anthropic
-    anthropic_api_key: str = ""
-    llm_model: str = "claude-sonnet-4-6"
-
-    # Trello
-    trello_api_key: str = ""
-    trello_api_token: str = ""
-    trello_board_id: str = ""
-    trello_list_id: str = ""
-    trello_done_list_id: str = ""
-
-    # Slack
-    slack_webhook_url: str = ""
-
-    # SendGrid
-    sendgrid_api_key: str = ""
-    reporter_email_from: str = "sre-agent@company.com"
-    mock_email: bool = False
+class Settings:
+    # App
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info").upper()
 
     # Database
-    database_url: str = "sqlite:///./data/incidents.db"
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./data/incidents.db")
 
-    # App
-    app_port: int = 8000
-    log_level: str = "INFO"
-    log_file: str = "/app/logs/agent.log"
+    # Anthropic
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
-    # E-commerce
-    ecommerce_repo_path: str = "/app/medusa-repo"
+    # Trello
+    TRELLO_API_KEY: str = os.getenv("TRELLO_API_KEY", "")
+    TRELLO_API_TOKEN: str = os.getenv("TRELLO_API_TOKEN", "")
+    TRELLO_BOARD_ID: str = os.getenv("TRELLO_BOARD_ID", "")
+    TRELLO_LIST_ID: str = os.getenv("TRELLO_LIST_ID", "")
+    TRELLO_DONE_LIST_ID: str = os.getenv("TRELLO_DONE_LIST_ID", "")
 
-    # Demo / mock mode
-    mock_integrations: bool = False
+    # Slack
+    SLACK_WEBHOOK_URL: str = os.getenv("SLACK_WEBHOOK_URL", "")
+    SLACK_CHANNEL: str = os.getenv("SLACK_CHANNEL", "#incidents")
 
-    # Resolution watcher
-    resolution_watcher_interval_seconds: int = 60
+    # SendGrid
+    SENDGRID_API_KEY: str = os.getenv("SENDGRID_API_KEY", "")
+    SENDGRID_FROM_EMAIL: str = os.getenv("SENDGRID_FROM_EMAIL", "sre-agent@example.com")
+    SENDGRID_FROM_NAME: str = os.getenv("SENDGRID_FROM_NAME", "SRE Agent")
+
+    # Mock mode — set MOCK_INTEGRATIONS=true to skip real API calls
+    MOCK_INTEGRATIONS: bool = os.getenv("MOCK_INTEGRATIONS", "false").lower() == "true"
+
+    # File storage
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
+    MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "10"))
+
+    # Medusa.js repo path (mounted as Docker volume)
+    MEDUSA_REPO_PATH: str = os.getenv("MEDUSA_REPO_PATH", "./medusa-repo")
+
+    # ResolutionWatcher
+    RESOLUTION_WATCHER_INTERVAL_SECONDS: int = int(
+        os.getenv("RESOLUTION_WATCHER_INTERVAL_SECONDS", "60")
+    )
+
+    @property
+    def max_file_size_bytes(self) -> int:
+        return self.MAX_FILE_SIZE_MB * 1024 * 1024
 
 
-@lru_cache
-def get_settings() -> Settings:
-    return Settings()
+settings = Settings()
