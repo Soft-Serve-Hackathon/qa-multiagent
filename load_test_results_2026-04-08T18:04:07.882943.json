@@ -1,0 +1,22 @@
+{
+  "mode": "MOCK",
+  "total_incidents": 50,
+  "statistics": {
+    "total_incidents": 50,
+    "successful": 50,
+    "failed": 0,
+    "success_rate": "100.0%",
+    "submit_times": {
+      "min_ms": 95,
+      "max_ms": 199,
+      "avg_ms": 153.24,
+      "p95_ms": 196,
+      "p99_ms": 199
+    },
+    "throughput_incidents_per_sec": 21.41665879752108
+  },
+  "severity_distribution": {
+    "P2": 50
+  },
+  "completed_at": "2026-04-08T18:04:07.882052"
+}

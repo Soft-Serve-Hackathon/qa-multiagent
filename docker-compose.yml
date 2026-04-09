@@ -1,0 +1,59 @@
+version: '3.9'
+
+services:
+  # FastAPI Backend Application
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    container_name: qa-multiagent-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/src:/app/src
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    environment:
+      - DATABASE_URL=sqlite:///./data/incidents.db
+      - DEBUG=false
+      - LOG_LEVEL=info
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    networks:
+      - qa-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx Frontend Application
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+    container_name: qa-multiagent-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - qa-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  qa-network:
+    driver: bridge
+
+volumes:
+  data:
+  logs:
+  uploads:
