@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from src.domain.entities import Incident, Ticket
 from src.application.dto import TriageResultDTO, TicketDTO
 from src.infrastructure.external.trello_client import TrelloClient
+from src.infrastructure.routing.owner_router import resolve_owner
 from src.infrastructure.observability.events import emit_event
 from src.config import settings
 
@@ -39,6 +40,14 @@ class TicketAgent:
             list_id=settings.TRELLO_LIST_ID or "default",
         )
 
+        owner = resolve_owner(triage.affected_module)
+        assigned_trello_member_id = owner.get("trello_member_id")
+        assigned_slack_user_id = owner.get("slack_user_id")
+
+        assignment_ok = False
+        if assigned_trello_member_id:
+            assignment_ok = self._trello.assign_member(result["card_id"], assigned_trello_member_id)
+
         # Add checklist with suggested files
         if triage.suggested_files and result["card_id"] != "mock-card-abc123":
             self._trello.add_checklist(
@@ -65,6 +74,9 @@ class TicketAgent:
             metadata={
                 "card_id": result["card_id"],
                 "card_url": result["card_url"],
+                "assigned_trello_member_id": assigned_trello_member_id,
+                "assigned_slack_user_id": assigned_slack_user_id,
+                "assignment_ok": assignment_ok,
                 "mock": settings.MOCK_INTEGRATIONS,
             },
         )
@@ -75,4 +87,6 @@ class TicketAgent:
             trello_card_id=result["card_id"],
             trello_card_url=result["card_url"],
             trello_list_id=settings.TRELLO_LIST_ID or "default",
+            assigned_trello_member_id=assigned_trello_member_id,
+            assigned_slack_user_id=assigned_slack_user_id,
         )

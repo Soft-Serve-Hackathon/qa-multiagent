@@ -110,13 +110,36 @@ See [QUICKGUIDE.md](QUICKGUIDE.md) for full instructions.
 **TL;DR:**
 ```bash
 git clone <repo-url>
-cd sre-triage-agent
+cd qa-multiagent
+
+# Clone Medusa.js codebase used by triage file lookups
+git clone https://github.com/medusajs/medusa.git medusa-repo
+
 cp .env.example .env
+# Ensure triage reads from the local Medusa.js clone
+export MEDUSA_REPO_PATH=./medusa-repo
+
 # Fill in: ANTHROPIC_API_KEY, TRELLO_API_KEY, TRELLO_API_TOKEN, SLACK_WEBHOOK_URL
 # OR: set MOCK_INTEGRATIONS=true for demo without real credentials
 docker compose up --build
 # Open http://localhost:3000
 ```
+
+For real Trello card creation and Slack-based owner assignment, configure:
+
+```bash
+export MOCK_INTEGRATIONS=false
+export OWNER_ROUTING_JSON='{"cart":{"trello_member_id":"<TRELLO_MEMBER_ID>","slack_user_id":"<SLACK_USER_ID>"},"payment":{"trello_member_id":"<TRELLO_MEMBER_ID>","slack_user_id":"<SLACK_USER_ID>"},"default":{"trello_member_id":"<ONCALL_TRELLO_MEMBER_ID>","slack_user_id":"<ONCALL_SLACK_USER_ID>"}}'
+```
+
+When an incident is created, the system will:
+1. Create the Trello card in the configured list.
+2. Assign the card to the routed Trello member.
+3. Send Slack alert mentioning the routed owner (`<@SLACK_USER_ID>`).
+4. Send a Slack resolution notice when the card moves to Done.
+
+If you are using the mock-integration profile, keep `MOCK_INTEGRATIONS=true` and still point
+`MEDUSA_REPO_PATH` to `./medusa-repo` so Claude can analyze real e-commerce code context.
 
 ---
 

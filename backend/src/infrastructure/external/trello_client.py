@@ -56,6 +56,17 @@ class TrelloClient:
                 timeout=10,
             )
 
+    def assign_member(self, card_id: str, member_id: str) -> bool:
+        """Assign a Trello member to a card."""
+        if not member_id:
+            return False
+        if self._mock:
+            return True
+
+        params = {**self._auth_params(), "idMember": member_id}
+        resp = requests.post(f"{TRELLO_BASE}/cards/{card_id}/idMembers", params=params, timeout=10)
+        return resp.status_code in (200, 201)
+
     def get_cards_in_list(self, list_id: str) -> list[dict]:
         """Fetch all cards in a Trello list (used by ResolutionWatcher)."""
         if self._mock:

@@ -33,3 +33,5 @@ class TicketDTO:
     trello_card_id: str
     trello_card_url: str
     trello_list_id: str
+    assigned_trello_member_id: Optional[str] = None
+    assigned_slack_user_id: Optional[str] = None
