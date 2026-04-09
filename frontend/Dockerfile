@@ -13,9 +13,13 @@ RUN npm install --prefer-offline
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Internal Docker URL so Next.js rewrites proxy to the backend container
+# Internal Docker URL so Next.js rewrites proxy to the backend container.
+# API_URL must be set at BUILD time — rewrites() in next.config.js is evaluated
+# during `npm run build` and baked into the standalone output.
 ARG NEXT_PUBLIC_API_URL=http://backend:8000/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG API_URL=http://backend:8000/api
+ENV API_URL=$API_URL
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ .
