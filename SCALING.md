@@ -11,21 +11,6 @@ The MVP runs as a single Docker container with FastAPI, SQLite, and a background
 
 **Deployment:** `docker compose up --build` — one command, no external services required.
 
-### Validated Load Capacity
-
-Tested with `scripts/load_test_50_incidents.py` (mock mode):
-
-| Metric | Result | Threshold |
-|---|---|---|
-| Concurrent incidents | 50/50 submitted | 100% |
-| Submit throughput | 242.5 incidents/sec | >50/sec |
-| End-to-end throughput | 21.4 incidents/sec | >10/sec |
-| P95 submit latency | 196ms | <500ms |
-| Success rate | 100% | >95% |
-| All tickets created | 50/50 (in ~2s) | 100% |
-
-SQLite WAL mode (`PRAGMA journal_mode=WAL`) prevents write contention at this load level.
-
 ---
 
 ## Scaling Bottlenecks Identified
@@ -40,22 +25,17 @@ SQLite WAL mode (`PRAGMA journal_mode=WAL`) prevents write contention at this lo
 **Bottleneck at:** ~1,000 concurrent writes  
 **Phase 2 solution:** PostgreSQL. The SQLAlchemy ORM is already configured with `DATABASE_URL` env var. Migration requires only changing the connection string — no code changes.
 
-### 3. Incident Deduplication
-**Current:** TicketAgent uses `SequenceMatcher` (string similarity) to detect duplicate incidents within the same module (threshold: 75%). Works well for exact or near-exact phrasings of the same outage.  
-**Limitation at:** High paraphrase variance — "DB pool full" vs "database connection queue exhausted" may score below threshold despite describing the same issue.  
-**Phase 2 solution:** Semantic similarity using vector embeddings (ChromaDB or Pinecone). Embed incident title+description on ingestion, query top-K similar vectors before TicketAgent runs. Handles semantic equivalence regardless of wording.
-
-### 4. ResolutionWatcher polling
+### 3. ResolutionWatcher polling
 **Current:** Background thread polls Trello every 60 seconds.  
 **Bottleneck at:** Latency (up to 60s) and Trello API rate limits at high volume  
 **Phase 2 solution:** Trello Webhooks. The endpoint `POST /api/webhooks/trello` is already implemented. Only Trello webhook configuration is needed — zero code changes.
 
-### 5. Single NotifyAgent instance
+### 4. Single NotifyAgent instance
 **Current:** Single thread sends all Slack and email notifications.  
 **Bottleneck at:** ~20 notifications/minute (SendGrid rate limits)  
 **Phase 2 solution:** NotifyAgent as a separate worker consuming from a notifications queue. N workers in parallel, each handling one channel.
 
-### 6. Medusa.js file-based context
+### 5. Medusa.js file-based context
 **Current:** TriageAgent reads specific files from the mounted Medusa.js repo.  
 **Bottleneck at:** Latency per tool call, inaccuracy on ambiguous modules  
 **Phase 2 solution:** ChromaDB (or similar) vector store with embeddings of the Medusa.js codebase. Semantic search returns the top-K most relevant code snippets in one fast query.
@@ -122,17 +102,9 @@ SQLite WAL mode (`PRAGMA journal_mode=WAL`) prevents write contention at this lo
 **Cost optimization strategies:**
 - Cache triage results for identical/near-identical incident texts (semantic deduplication)
 - Use a lighter model (claude-haiku-4-5) for low-confidence initial triage, escalate to claude-sonnet-4-6 for P1/P2
-- OpenRouter support: `LLM_PROVIDER=openrouter` env var allows switching to alternative models at lower cost
+- Use a lighter model (claude-haiku-4-5) for low-confidence initial triage, escalate to claude-sonnet-4-6 for P1/P2 (future)
 
 ---
-
-## OpenRouter Support
-
-The LLM client abstraction in `backend/src/infrastructure/llm/client.py` supports `LLM_PROVIDER` env var:
-- `LLM_PROVIDER=anthropic` (default) → uses Anthropic SDK directly
-- `LLM_PROVIDER=openrouter` → routes through OpenRouter API, enabling access to alternative models at lower cost
-
-This allows cost optimization in production without changing agent code.
 
 ---
 

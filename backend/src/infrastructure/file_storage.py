@@ -1,100 +1,68 @@
-"""
-File Storage.
-
-Handles multimodal input file storage (logs, images, traces).
-"""
-
+"""File storage — save multimodal attachments and encode them for the LLM."""
 import base64
-import logging
+import os
 from pathlib import Path
-from typing import Optional
+from fastapi import UploadFile
+from src.config import settings
+from src.domain.value_objects import ALLOWED_EXTENSIONS, ALLOWED_MIME_TYPES
+from src.domain.exceptions import UnsupportedFileTypeError, FileTooLargeError, EmptyOrCorruptAttachmentError
 
-import magic
 
-logger = logging.getLogger(__name__)
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 
-class FileStorageManager:
+def get_extension(filename: str) -> str:
+    return Path(filename).suffix.lower()
+
+
+def is_image(filename: str) -> bool:
+    return get_extension(filename) in {".png", ".jpg", ".jpeg"}
+
+
+def is_log(filename: str) -> bool:
+    return get_extension(filename) in {".txt", ".log"}
+
+
+async def save_attachment(file: UploadFile, trace_id: str) -> tuple[str, str]:
     """
-    Manages file storage and retrieval for multimodal incident analysis.
-    Prevents path traversal attacks, auto-detects MIME types, and handles
-    encoding/decoding for LLM consumption.
+    Validate and save an uploaded file.
+    Returns (attachment_type, file_path).
+    Raises domain exceptions on validation failure.
     """
+    ext = get_extension(file.filename or "")
+    if ext not in ALLOWED_EXTENSIONS:
+        raise UnsupportedFileTypeError(f"File type '{ext}' is not allowed.")
 
-    BASE_DIR = Path(__file__).parent.parent.parent.parent / "uploads"
+    content = await file.read()
+    if not content:
+        raise EmptyOrCorruptAttachmentError("Uploaded file is empty.")
 
-    @staticmethod
-    def _validate_path(path: Path) -> bool:
-        """
-        Ensure path is within BASE_DIR (prevent path traversal).
-        Returns True if safe, False otherwise.
-        """
-        try:
-            path.resolve().relative_to(FileStorageManager.BASE_DIR.resolve())
-            return True
-        except ValueError:
-            return False
+    max_bytes = settings.max_file_size_bytes
+    if len(content) > max_bytes:
+        raise FileTooLargeError(f"File exceeds {settings.MAX_FILE_SIZE_MB}MB limit.")
 
-    @staticmethod
-    def read_attachment(file_path: str) -> tuple[str, bytes] | None:
-        """
-        Read attachment file and detect MIME type.
-        Returns (mime_type, data_bytes) or None if file doesn't exist or is unsafe.
-        """
-        try:
-            path = Path(file_path)
-            if not FileStorageManager._validate_path(path):
-                logger.warning(f"Path traversal attempt: {file_path}")
-                return None
+    attachment_type = "image" if is_image(file.filename or "") else "log"
+    file_path = os.path.join(settings.UPLOAD_DIR, f"{trace_id}{ext}")
 
-            if not path.exists() or not path.is_file():
-                return None
+    with open(file_path, "wb") as f:
+        f.write(content)
 
-            data = path.read_bytes()
-            mime = magic.Magic(mime=True)
-            mime_type = mime.from_buffer(data)
+    return attachment_type, file_path
 
-            return mime_type, data
-        except Exception as exc:
-            logger.error(f"Error reading attachment {file_path}: {exc}")
-            return None
 
-    @staticmethod
-    def get_image_base64(trace_id: str) -> str | None:
-        """
-        Find and read image attachment for trace_id, return base64 encoded.
-        Searches for {trace_id}.png or {trace_id}.jpg in uploads/.
-        Returns base64 string or None if not found/invalid.
-        """
-        for ext in ("png", "jpg", "jpeg"):
-            file_path = FileStorageManager.BASE_DIR / f"{trace_id}.{ext}"
-            result = FileStorageManager.read_attachment(str(file_path))
-            if result:
-                mime_type, data = result
-                if mime_type.startswith("image/"):
-                    return base64.b64encode(data).decode("utf-8")
-        return None
+def read_as_base64(file_path: str) -> str:
+    """Read a file and return its base64-encoded content (for Claude image input)."""
+    with open(file_path, "rb") as f:
+        return base64.standard_b64encode(f.read()).decode("utf-8")
 
-    @staticmethod
-    def get_log_text(trace_id: str, max_bytes: int = 50000) -> str | None:
-        """
-        Find and read log/text attachment for trace_id, return text content.
-        Searches for {trace_id}.txt or {trace_id}.log in uploads/.
-        Limits content to max_bytes (50KB default). Returns text or None.
-        Uses UTF-8 with fallback to latin-1 for encoding issues.
-        """
-        for ext in ("txt", "log"):
-            file_path = FileStorageManager.BASE_DIR / f"{trace_id}.{ext}"
-            result = FileStorageManager.read_attachment(str(file_path))
-            if result:
-                mime_type, data = result
-                if "text" in mime_type or mime_type == "application/octet-stream":
-                    try:
-                        text = data.decode("utf-8", errors="replace")
-                        if len(data) > max_bytes:
-                            text = text[:max_bytes] + "\n... (content truncated)"
-                        return text
-                    except Exception as exc:
-                        logger.error(f"Error decoding log {file_path}: {exc}")
-                        continue
-        return None
+
+def read_as_text(file_path: str) -> str:
+    """Read a text/log file and return its content (for Claude text input)."""
+    with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        return f.read()[:8000]  # Truncate very large logs
+
+
+def get_media_type(file_path: str) -> str:
+    """Return MIME type for Claude image messages."""
+    ext = Path(file_path).suffix.lower()
+    return {"png": "image/png", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(ext, "image/png")

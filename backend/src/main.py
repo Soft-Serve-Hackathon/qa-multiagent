@@ -1,73 +1,52 @@
-"""
-FastAPI application entry point.
-
-Main application instance and startup/shutdown events.
-"""
-
-import logging
-import time
+"""FastAPI application entry point — registers routes, initializes DB, starts ResolutionWatcher."""
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .agents.resolution_watcher import ResolutionWatcher
-from .api.routes import router
-from .config import get_settings
-from .infrastructure.database import create_tables
-from .infrastructure.observability.logger import configure_logging
-
-settings = get_settings()
-
-configure_logging(level=settings.log_level, log_file=settings.log_file)
-logger = logging.getLogger(__name__)
-
-_start_time = time.time()
-
-# Initialize ResolutionWatcher for background polling
-resolution_watcher = ResolutionWatcher()
+from src.config import settings
+from src.infrastructure.database import init_db
+from src.agents.resolution_watcher import get_watcher
+from src.api.routes import router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    create_tables()
-    logger.info("Database tables ready")
-
-    await resolution_watcher.start()
-    logger.info("ResolutionWatcher started")
-
+    init_db()
+    watcher = get_watcher()
+    watcher.start()
     yield
-
     # Shutdown
-    await resolution_watcher.stop()
-    logger.info("ResolutionWatcher stopped")
+    watcher.stop()
 
 
 app = FastAPI(
     title="SRE Incident Intake & Triage Agent",
-    version="1.0.0",
-    description="Automated incident triage pipeline powered by Claude",
+    description=(
+        "Multi-agent system for automated SRE incident triage. "
+        "Powered by Claude claude-sonnet-4-6 with multimodal support. "
+        "Built for the AgentX Hackathon by SoftServe."
+    ),
+    version=settings.APP_VERSION,
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(router)
+app.include_router(router, prefix="/api")
 
 
-@app.get("/api/health")
-def health():
+@app.get("/")
+def root():
     return {
-        "status": "ok",
-        "version": "1.0.0",
-        "uptime_seconds": int(time.time() - _start_time),
-        "database": "connected",
-        "mock_mode": settings.mock_integrations,
+        "service": "SRE Incident Intake & Triage Agent",
+        "version": settings.APP_VERSION,
+        "docs": "/docs",
+        "health": "/api/health",
     }

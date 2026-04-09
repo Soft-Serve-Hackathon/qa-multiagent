@@ -1,225 +1,94 @@
-"""
-Triage Agent.
-
-Analyzes incident data using LLM (supports multimodal input: logs, images).
-Generates triage results with severity, impact, and resolution recommendations.
-Persists results and emits observability events.
-"""
-
+"""TriageAgent — the only agent that calls the LLM. Produces structured triage results."""
 import json
-import logging
-from typing import Any, Optional
+import time
+from sqlalchemy.orm import Session
 
-from ..config import get_settings
-from ..domain.enums import IncidentStatus, ObservabilityStage, ObservabilityStatus
-from ..infrastructure.database import (
-    IncidentModel,
-    TriageResultModel,
-    get_db,
-)
-from ..infrastructure.file_storage import FileStorageManager
-from ..infrastructure.llm.client import AnthropicLLMClient
-from ..infrastructure.observability.events import emit_event
-
-logger = logging.getLogger(__name__)
+from src.domain.entities import Incident, TriageResult
+from src.application.dto import TriageResultDTO
+from src.infrastructure.llm.client import get_llm_client
+from src.infrastructure.file_storage import read_as_base64, read_as_text, get_media_type
+from src.infrastructure.observability.events import emit_event
 
 
 class TriageAgent:
     """
-    Analyzes incident reports using Claude with multimodal support.
-    Determines severity, affected module, technical analysis, and suggested files.
-    Persists triage results and emits observability events.
+    Responsibility: Analyze incident with Claude (multimodal). Persist TriageResult.
+    Updates Incident status to 'triaging' then 'ticketed'.
     """
 
-    def __init__(self) -> None:
-        """Initialize agent with settings."""
-        self.settings = get_settings()
-        self.llm_client = AnthropicLLMClient(
-            api_key=self.settings.anthropic_api_key,
-            model=self.settings.llm_model,
+    def __init__(self, db: Session):
+        self._db = db
+        self._llm = get_llm_client()
+
+    def process(self, incident_id: int) -> TriageResultDTO:
+        start = time.monotonic()
+        incident: Incident = self._db.query(Incident).filter(Incident.id == incident_id).first()
+        if not incident:
+            raise ValueError(f"Incident {incident_id} not found")
+
+        # Update status
+        incident.status = "triaging"
+        self._db.commit()
+
+        # Prepare multimodal content
+        attachment_base64 = None
+        attachment_text = None
+        media_type = "image/png"
+
+        if incident.attachment_path:
+            if incident.attachment_type == "image":
+                attachment_base64 = read_as_base64(incident.attachment_path)
+                media_type = get_media_type(incident.attachment_path)
+            elif incident.attachment_type == "log":
+                attachment_text = read_as_text(incident.attachment_path)
+
+        # Call LLM
+        raw_result = self._llm.triage_incident(
+            title=incident.title,
+            description=incident.description,
+            attachment_type=incident.attachment_type,
+            attachment_base64=attachment_base64,
+            attachment_text=attachment_text,
+            attachment_media_type=media_type,
         )
 
-    def process(self, incident_id: int, trace_id: str) -> Optional[dict[str, Any]]:
-        """
-        Triage an incident: read incident + attachments, call Claude, persist result.
+        suggested_files = raw_result.get("suggested_files", [])
 
-        Args:
-            incident_id: ID of incident to triage
-            trace_id: Trace ID for observability
+        # Persist TriageResult
+        triage = TriageResult(
+            incident_id=incident.id,
+            severity=raw_result.get("severity", "P3"),
+            affected_module=raw_result.get("affected_module", "unknown"),
+            technical_summary=raw_result.get("technical_summary", ""),
+            suggested_files=json.dumps(suggested_files),
+            confidence_score=float(raw_result.get("confidence_score", 0.5)),
+            raw_llm_response=json.dumps(raw_result),
+        )
+        self._db.add(triage)
+        incident.status = "ticketed"
+        self._db.commit()
+        self._db.refresh(triage)
 
-        Returns:
-            Dictionary with triage result or None on error
-        """
-        import time
-        start_time = time.monotonic()
+        duration_ms = int((time.monotonic() - start) * 1000)
+        emit_event(
+            "triage", "success", incident.trace_id, duration_ms,
+            incident_id=incident.id,
+            metadata={
+                "model": "claude-sonnet-4-6",
+                "severity_detected": triage.severity,
+                "module_detected": triage.affected_module,
+                "confidence": triage.confidence_score,
+                "files_found": len(suggested_files),
+                "multimodal": incident.attachment_type is not None,
+            },
+        )
 
-        try:
-            # ── 1️⃣ Read incident from database ────────────────────────────────
-            with get_db() as db:
-                incident = (
-                    db.query(IncidentModel)
-                    .filter(IncidentModel.id == incident_id)
-                    .first()
-                )
-
-                if not incident:
-                    logger.error(f"[{trace_id}] Incident not found: {incident_id}")
-                    self._emit_error_event(
-                        trace_id, incident_id, "incident_not_found", start_time
-                    )
-                    return None
-
-                # Extract attributes while session is open
-                incident_title = incident.title
-                incident_description = incident.description
-
-                # ── 2️⃣ Update status to TRIAGING ──────────────────────────────────
-                incident.status = IncidentStatus.TRIAGING.value
-                db.commit()
-
-            # ── 3️⃣ Read multimodal attachments ────────────────────────────────
-            attachment_image_base64 = FileStorageManager.get_image_base64(trace_id)
-            attachment_log_text = FileStorageManager.get_log_text(trace_id)
-
-            # ── 4️⃣ Call Claude with multimodal content (or mock) ──────────────
-            if self.settings.mock_integrations:
-                logger.info(f"[{trace_id}] MOCK MODE: Generating simulated triage with reasoning chain")
-                
-                # Simulate reasoning chain for demonstration
-                reasoning_chain = [
-                    {"step": "symptom_analysis", "analysis": f"Primary symptom detected: '{incident_title}'. Priority keywords: connection, pool, database, error."},
-                    {"step": "severity_assessment", "analysis": "Revenue impact: HIGH (database unavailability). User impact: MANY (affects all queries). Service impact: CRITICAL. Recommended severity: P2."},
-                    {"step": "component_analysis", "analysis": "Pattern matching identifies Database service. Related components: Connection pooling layer, ORM configuration."},
-                    {"step": "confidence_score", "analysis": "Keywords match known patterns with high confidence."},
-                ]
-                
-                triage_data = {
-                    "severity": "P2",
-                    "affected_module": "backend",
-                    "technical_summary": "[MOCK] Simulated triage analysis. Real LLM disabled by MOCK_INTEGRATIONS=true",
-                    "suggested_files": ["src/api/handler.py", "src/services/cache.py"],
-                    "confidence_score": 0.8,
-                    "reasoning_chain": reasoning_chain,  # <- NUEVO: Reasoning agregado
-                }
-            else:
-                logger.info(
-                    f"[{trace_id}] Calling Claude for triage"
-                    f" (image={bool(attachment_image_base64)}, log={bool(attachment_log_text)})"
-                )
-
-                triage_data = self.llm_client.process_triage(
-                    incident_title=incident_title,
-                    incident_description=incident_description,
-                    attachment_image_base64=attachment_image_base64,
-                    attachment_log_text=attachment_log_text,
-                    trace_id=trace_id,
-                )
-
-            # ── 5️⃣ Validate triage result structure ────────────────────────────
-            required_fields = [
-                "severity",
-                "affected_module",
-                "technical_summary",
-                "suggested_files",
-                "confidence_score",
-            ]
-            if not all(field in triage_data for field in required_fields):
-                logger.error(f"[{trace_id}] Incomplete triage result: {triage_data}")
-                self._emit_error_event(
-                    trace_id,
-                    incident_id,
-                    "invalid_triage_result",
-                    start_time,
-                )
-                return None
-
-            # ── 6️⃣ Persist triage result ───────────────────────────────────────
-            with get_db() as db:
-                triage_result = TriageResultModel(
-                    incident_id=incident_id,
-                    severity=triage_data["severity"],
-                    affected_module=triage_data["affected_module"],
-                    technical_summary=triage_data["technical_summary"],
-                    suggested_files=json.dumps(triage_data.get("suggested_files", [])),
-                    confidence_score=triage_data.get("confidence_score", 0.5),
-                    reasoning_chain=json.dumps(triage_data.get("reasoning_chain", [])),  # <- NUEVO
-                    raw_llm_response=None,  # Only store if debugging is needed
-                )
-                db.add(triage_result)
-                db.flush()
-
-                # ── 7️⃣ Update incident status to TICKETED ───────────────────────────
-                # (Ready for next agent in pipeline)
-                incident_model = (
-                    db.query(IncidentModel)
-                    .filter(IncidentModel.id == incident_id)
-                    .first()
-                )
-                if incident_model:
-                    incident_model.status = IncidentStatus.TICKETED.value
-                    db.commit()
-
-            # ── 8️⃣ Emit success event with metadata ────────────────────────────
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-
-            metadata = {
-                "severity_detected": triage_data["severity"],
-                "module_detected": triage_data["affected_module"],
-                "confidence_score": triage_data["confidence_score"],
-                "model": self.settings.llm_model,
-                "has_image_attachment": bool(attachment_image_base64),
-                "has_log_attachment": bool(attachment_log_text),
-                "num_suggested_files": len(triage_data.get("suggested_files", [])),
-            }
-
-            emit_event(
-                trace_id=trace_id,
-                stage=ObservabilityStage.TRIAGE,
-                status=ObservabilityStatus.SUCCESS,
-                duration_ms=duration_ms,
-                incident_id=incident_id,
-                metadata=metadata,
-            )
-
-            logger.info(
-                f"[{trace_id}] Triage completed:"
-                f" severity={triage_data['severity']}"
-                f" module={triage_data['affected_module']}"
-                f" confidence={triage_data['confidence_score']:.2f}"
-            )
-
-            return {
-                "incident_id": incident_id,
-                "trace_id": trace_id,
-                "triage_result": triage_data,
-            }
-
-        except Exception as exc:
-            logger.exception(f"[{trace_id}] TriageAgent error: {exc}")
-            self._emit_error_event(trace_id, incident_id, str(exc), start_time)
-            return None
-
-    def _emit_error_event(
-        self,
-        trace_id: str,
-        incident_id: Optional[int],
-        error_msg: str,
-        start_time: Optional[float] = None,
-    ) -> None:
-        """Helper to emit error observability event."""
-        import time
-        duration_ms = 0
-        if start_time is not None:
-            duration_ms = int((time.monotonic() - start_time) * 1000)
-
-        try:
-            emit_event(
-                trace_id=trace_id,
-                stage=ObservabilityStage.TRIAGE,
-                status=ObservabilityStatus.ERROR,
-                duration_ms=duration_ms,
-                incident_id=incident_id,
-                metadata={"error": error_msg},
-            )
-        except Exception as exc:
-            logger.error(f"Failed to emit error event: {exc}")
+        return TriageResultDTO(
+            incident_id=incident.id,
+            trace_id=incident.trace_id,
+            severity=triage.severity,
+            affected_module=triage.affected_module,
+            technical_summary=triage.technical_summary,
+            suggested_files=suggested_files,
+            confidence_score=triage.confidence_score,
+        )

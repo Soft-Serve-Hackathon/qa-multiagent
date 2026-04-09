@@ -1,73 +1,75 @@
-"""
-Domain Entities.
-
-Core aggregate roots: Incident, TriageResult, Ticket, NotificationLog.
-These are pure Python dataclasses — no ORM dependencies.
-"""
-
-from dataclasses import dataclass, field
+"""SQLAlchemy ORM models — one table per domain entity."""
 from datetime import datetime
-from typing import Optional
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
+from sqlalchemy.orm import declarative_base
 
-from .enums import (
-    AffectedModule,
-    AttachmentType,
-    IncidentStatus,
-    NotificationChannel,
-    NotificationStatus,
-    NotificationType,
-    Severity,
-    TicketStatus,
-)
+Base = declarative_base()
 
 
-@dataclass
-class Incident:
-    title: str
-    description: str
-    reporter_email: str
-    id: Optional[int] = None
-    trace_id: Optional[str] = None
-    attachment_type: Optional[AttachmentType] = None
-    attachment_path: Optional[str] = None
-    status: IncidentStatus = IncidentStatus.RECEIVED
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    trace_id = Column(String(36), unique=True, nullable=False, index=True)
+    title = Column(Text, nullable=False)
+    description = Column(Text, nullable=False)
+    reporter_email = Column(String(254), nullable=False)
+    attachment_type = Column(String(10), nullable=True)   # 'image' | 'log' | None
+    attachment_path = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default="received")
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-@dataclass
-class TriageResult:
-    incident_id: int
-    severity: Severity
-    affected_module: AffectedModule
-    technical_summary: str
-    suggested_files: list[str]
-    confidence_score: float
-    id: Optional[int] = None
-    raw_llm_response: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+class TriageResult(Base):
+    __tablename__ = "triage_results"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=False)
+    severity = Column(String(5), nullable=False)          # P1 | P2 | P3 | P4
+    affected_module = Column(String(50), nullable=False)
+    technical_summary = Column(Text, nullable=False)
+    suggested_files = Column(Text, nullable=False)        # JSON array as string
+    confidence_score = Column(Float, nullable=False)
+    raw_llm_response = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
-@dataclass
-class Ticket:
-    incident_id: int
-    trello_list_id: str
-    id: Optional[int] = None
-    trello_card_id: Optional[str] = None
-    trello_card_url: Optional[str] = None
-    status: TicketStatus = TicketStatus.PENDING
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    resolved_at: Optional[datetime] = None
+class Ticket(Base):
+    __tablename__ = "tickets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=False)
+    trello_card_id = Column(String(100), nullable=True)
+    trello_card_url = Column(Text, nullable=True)
+    trello_list_id = Column(String(100), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
 
 
-@dataclass
-class NotificationLog:
-    incident_id: int
-    channel: NotificationChannel
-    recipient: str
-    notification_type: NotificationType
-    content_summary: str
-    status: NotificationStatus
-    id: Optional[int] = None
-    sent_at: datetime = field(default_factory=datetime.utcnow)
-    error_message: Optional[str] = None
+class NotificationLog(Base):
+    __tablename__ = "notification_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=False)
+    channel = Column(String(10), nullable=False)          # 'slack' | 'email'
+    recipient = Column(String(254), nullable=False)
+    notification_type = Column(String(30), nullable=False)
+    content_summary = Column(Text, nullable=False)
+    status = Column(String(10), nullable=False)           # 'sent' | 'failed' | 'mocked'
+    sent_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    error_message = Column(Text, nullable=True)
+
+
+class ObservabilityEvent(Base):
+    __tablename__ = "observability_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    trace_id = Column(String(36), nullable=False, index=True)
+    stage = Column(String(20), nullable=False)            # ingest | triage | ticket | notify | resolved
+    incident_id = Column(Integer, nullable=True)
+    status = Column(String(10), nullable=False)           # 'success' | 'error'
+    duration_ms = Column(Integer, nullable=False)
+    event_metadata = Column(Text, nullable=False, default="{}")  # JSON string
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
