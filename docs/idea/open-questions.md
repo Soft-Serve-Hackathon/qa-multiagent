@@ -1,40 +1,40 @@
 # Open Questions
 
-## Decisiones ya tomadas (documentadas aquí para trazabilidad)
+## Decisions already made (documented here for traceability)
 
-| Pregunta | Decisión | Razón |
+| Question | Decision | Reason |
 |---|---|---|
-| ¿Qué app e-commerce usar como base de conocimiento del agente? | **Medusa.js** (medusajs/medusa) | TypeScript, alta complejidad real, excelente documentación, activo. El agente analiza payments, orders, inventory. |
-| ¿Qué LLM multimodal usar? | **Claude claude-sonnet-4-6** (Anthropic SDK) | Multimodal nativo, disponible en el workspace, maneja imagen + texto en el mismo request. |
-| ¿Qué stack de backend? | **Python + FastAPI** | Mejor integración con Anthropic SDK, librerías de análisis de código y observability. |
-| ¿Qué sistema de ticketing? | **Trello** (API real) | El equipo tiene cuenta. El hackathon acepta "Jira / Linear / Other" — Trello es válido. Las Cards representan incidentes. |
-| ¿Qué comunicador? | **Slack** (Incoming Webhook real) | El equipo tiene workspace. Webhooks no requieren OAuth complejo. |
-| ¿Qué modalidades soportar? | **Texto + imagen (PNG/JPG) + log (.txt/.log)** | Cubre los casos más comunes de reporte de incidentes. Video es opcional para el MVP. |
-| ¿Equipo de cuántas personas? | **2-3 personas** | Las tareas se dividen en paralelo por capa (frontend, backend, integraciones). |
-| ¿Persistencia? | **SQLite** (vía SQLAlchemy) | Simplifica el setup Docker. El schema es compatible con PostgreSQL para escala futura. |
-| ¿Cómo accede el agente al codebase de Medusa.js? | Clonado durante Docker build, montado como volumen read-only. Tool `read_ecommerce_file(path)` en el TriageAgent. | Sin complejidad de embeddings para el MVP. |
+| Which e-commerce app should the agent use as its knowledge base? | **Medusa.js** (medusajs/medusa) | TypeScript, high real-world complexity, excellent documentation, actively maintained. The agent analyzes payments, orders, and inventory. |
+| Which multimodal LLM should be used? | **Claude claude-sonnet-4-6** (Anthropic SDK) | Native multimodal support, available in the workspace, handles image + text in the same request. |
+| What backend stack? | **Python + FastAPI** | Best integration with the Anthropic SDK, code analysis libraries, and observability. |
+| What ticketing system? | **Trello** (real API) | The team has an account. The hackathon accepts "Jira / Linear / Other" — Trello is valid. Cards represent incidents. |
+| What communicator? | **Slack** (Incoming Webhook) | The team has a workspace. Webhooks do not require complex OAuth. |
+| What modalities should be supported? | **Text + image (PNG/JPG) + log (.txt/.log)** | Covers the most common incident report cases. Video is optional for the MVP. |
+| Team size? | **2-3 people** | Tasks are divided in parallel by layer (frontend, backend, integrations). |
+| Persistence? | **SQLite** (via SQLAlchemy) | Simplifies Docker setup. The schema is PostgreSQL-compatible for future scaling. |
+| How does the agent access the Medusa.js codebase? | Cloned during Docker build, mounted as a read-only volume. Tool `read_ecommerce_file(path)` in TriageAgent. | No embedding complexity needed for the MVP. |
 
-## Preguntas aún abiertas
+## Open questions
 
-### Scope del MVP
-- **¿Runbook suggestions en el MVP?** El hackathon los menciona como opcional que suma puntos. Evaluar si hay tiempo después de tener el flujo e2e funcionando.
-- **¿Deduplicación de incidentes?** También opcional. Agregar si queda tiempo — requiere comparación semántica de reportes similares.
-- **¿Severity scoring automático con lógica adicional?** El TriageAgent ya produce P1-P4, pero ¿se necesita una capa de reglas de negocio adicional? Por ahora, el LLM determina la severidad.
+### MVP scope
+- **Runbook suggestions in the MVP?** The hackathon mentions them as optional for extra points. Evaluate if there is time after the end-to-end flow works.
+- **Incident deduplication?** Also optional. Add if time remains — requires semantic similarity comparison of reports.
+- **Automatic severity scoring with additional business logic?** The TriageAgent already outputs P1-P4, but is an extra rule layer needed? For now, the LLM determines severity.
 
-### Implementación
-- **¿Webhook de Trello o polling para detectar cards resueltas?** Trello tiene webhooks. Si la configuración es compleja en el tiempo disponible, usar polling cada 60 segundos como fallback.
-- **¿Cómo accede el ResolutionWatcher a las credenciales de Trello en Docker?** Via variables de entorno del contenedor — ya definido en `.env.example`.
-- **¿El formulario web es HTML puro o necesita un mini framework?** HTML5 + vanilla JS es suficiente para el demo. No sobrearquitectar el frontend.
-- **¿Email real o mock?** SendGrid si hay credenciales disponibles, mock con log detallado si no. `MOCK_EMAIL=true` en `.env`.
+### Implementation
+- **Trello webhook or polling to detect resolved cards?** Trello supports webhooks. If configuration is too complex for the available time, use 60-second polling as a fallback.
+- **How does ResolutionWatcher access Trello credentials in Docker?** Via container environment variables — already defined in `.env.example`.
+- **Should the web form be plain HTML or use a mini framework?** HTML5 + vanilla JS is sufficient for the demo. Do not over-engineer the frontend.
+- **Real email or mock?** SendGrid if credentials are available, mock with detailed logs otherwise. Set `MOCK_EMAIL=true` in `.env`.
 
-### Demo y submission
-- **¿Quién graba el video demo?** Debe grabarse cuando el flujo e2e funcione. Máximo 3 minutos, en inglés, subir a YouTube con tag `#AgentXHackathon`.
-- **¿El repo debe estar público antes o solo al momento de submission?** Hacerlo público justo antes de submitear para evitar que otros vean el trabajo antes.
-- **¿Qué cuenta de Trello usar para el board del demo?** Definir un board específico para el hackathon con columnas: To Do / In Progress / Done.
+### Demo and submission
+- **Who records the demo video?** It should be recorded once the end-to-end flow works. Maximum 3 minutes, in English, uploaded to YouTube with tag `#AgentXHackathon`.
+- **Should the repo be public before or only at submission time?** Make it public just before submission to avoid others seeing the work early.
+- **Which Trello account should be used for the demo board?** Use a dedicated board for the hackathon with columns: To Do / In Progress / Done.
 
-## Restricciones técnicas conocidas
-- Docker Compose es obligatorio — toda la app debe correr con `docker compose up --build`
-- No se puede hacer fork de proyectos existentes — el código debe ser original
-- El repo debe tener licencia MIT
-- El video debe ser en inglés
-- Deadline absoluto: 9 de abril 10PM COT — sin extensiones
+## Known technical constraints
+- Docker Compose is mandatory — the whole app must run with `docker compose up --build`
+- You cannot fork existing projects — the code must be original
+- The repo must have an MIT license
+- The video must be in English
+- Absolute deadline: April 9 at 10PM COT — no extensions
