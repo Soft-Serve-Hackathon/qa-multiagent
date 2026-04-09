@@ -1,4 +1,5 @@
 """Application configuration — loaded from environment variables via python-dotenv."""
+import json
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -16,6 +17,18 @@ def _resolve_medusa_repo_path() -> str:
     # config.py is in backend/src, so project root is two levels up from backend/
     project_root = Path(__file__).resolve().parents[2]
     return str((project_root / candidate).resolve())
+
+
+def _parse_owner_routing() -> dict:
+    """Parse owner routing JSON from env. Returns empty mapping on invalid JSON."""
+    raw = os.getenv("OWNER_ROUTING_JSON", "{}").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        return {}
 
 
 class Settings:
@@ -62,6 +75,14 @@ class Settings:
     RESOLUTION_WATCHER_INTERVAL_SECONDS: int = int(
         os.getenv("RESOLUTION_WATCHER_INTERVAL_SECONDS", "60")
     )
+
+    # Owner routing by module for Trello + Slack assignment.
+    # Example:
+    # {
+    #   "cart": {"trello_member_id": "abc123", "slack_user_id": "U012345"},
+    #   "default": {"trello_member_id": "xyz789", "slack_user_id": "U098765"}
+    # }
+    OWNER_ROUTING: dict = _parse_owner_routing()
 
     @property
     def max_file_size_bytes(self) -> int:

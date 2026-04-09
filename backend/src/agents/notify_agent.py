@@ -41,6 +41,7 @@ class NotifyAgent:
             confidence=triage.confidence_score,
             trello_url=ticket.trello_card_url,
             trace_id=triage.trace_id,
+            owner_slack_user_id=ticket.assigned_slack_user_id,
         )
         self._log_notification(
             incident_id=incident.id,
@@ -82,6 +83,8 @@ class NotifyAgent:
                 "channels": notifications_sent,
                 "slack_ok": slack_ok,
                 "email_ok": email_ok,
+                "assigned_slack_user_id": ticket.assigned_slack_user_id,
+                "assigned_trello_member_id": ticket.assigned_trello_member_id,
                 "mock": settings.MOCK_INTEGRATIONS,
             },
         )
