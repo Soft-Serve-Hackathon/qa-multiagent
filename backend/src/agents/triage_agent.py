@@ -62,10 +62,11 @@ class TriageAgent:
             technical_summary=raw_result.get("technical_summary", ""),
             suggested_files=json.dumps(suggested_files),
             confidence_score=float(raw_result.get("confidence_score", 0.5)),
+            reasoning_chain=json.dumps(raw_result.get("reasoning_chain", [])),
             raw_llm_response=json.dumps(raw_result),
         )
         self._db.add(triage)
-        incident.status = "ticketed"
+        # Leave status as "triaging" — TicketAgent will set it to "ticketed"
         self._db.commit()
         self._db.refresh(triage)
 

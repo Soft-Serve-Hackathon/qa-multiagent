@@ -28,7 +28,6 @@ class CreateIncidentUseCase:
             attachment=attachment,
         )
 
-        # Kick off the rest of the pipeline in background (non-blocking)
         background_tasks.add_task(_run_pipeline, incident.id)
 
         return IncidentCreatedResponse(
@@ -38,22 +37,32 @@ class CreateIncidentUseCase:
 
 
 def _run_pipeline(incident_id: int) -> None:
-    """Background task: triage → ticket → notify. Each step updates the DB."""
+    """Background task: triage → qa_scope → fix_recommendation → ticket → notify."""
     from src.agents.triage_agent import TriageAgent
+    from src.agents.qa_agent import QAAgent
+    from src.agents.fix_recommendation_agent import FixRecommendationAgent
     from src.agents.ticket_agent import TicketAgent
     from src.agents.notify_agent import NotifyAgent
 
     db = SessionLocal()
     try:
-        triage_agent = TriageAgent(db)
-        triage_dto = triage_agent.process(incident_id)
+        # Stage 1: Triage (LLM + Medusa repo context)
+        triage_dto = TriageAgent(db).process(incident_id)
 
-        ticket_agent = TicketAgent(db)
-        ticket_dto = ticket_agent.process(triage_dto)
+        # Stage 2: QA Scope — finds/proposes tests (continues on failure)
+        qa_dto = QAAgent(db).process(triage_dto)
 
-        notify_agent = NotifyAgent(db)
-        notify_agent.process(triage_dto, ticket_dto, notification_type="team_and_reporter")
+        # Stage 3: Fix Recommendation — proposes fix (continues on failure)
+        fix_dto = FixRecommendationAgent(db).process(triage_dto, qa_dto)
+
+        # Stage 4: Ticket — deduplication + Trello card with full context
+        ticket_dto = TicketAgent(db).process(triage_dto, qa_dto, fix_dto)
+
+        # Stage 5: Notify — skip if deduplicated (no new card was created)
+        if not ticket_dto.deduplicated:
+            NotifyAgent(db).process(triage_dto, ticket_dto, notification_type="team_and_reporter")
+
     except Exception:
-        pass  # Errors are logged inside each agent
+        pass  # Errors are logged as observability events inside each agent
     finally:
         db.close()

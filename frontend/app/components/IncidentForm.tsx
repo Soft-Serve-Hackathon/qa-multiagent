@@ -5,7 +5,7 @@ import axios from 'axios';
 import FormInput from './ui/FormInput';
 
 interface IncidentFormProps {
-  onSubmit: (traceId: string) => void;
+  onSubmit: (incidentId: number, traceId: string) => void;
   onError: (error: string) => void;
   inlineError?: string | null;
 }
@@ -105,10 +105,10 @@ export default function IncidentForm({ onSubmit, onError, inlineError }: Inciden
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      if (response.data.trace_id) {
-        onSubmit(response.data.trace_id);
+      if (response.data.incident_id && response.data.trace_id) {
+        onSubmit(response.data.incident_id, response.data.trace_id);
       } else {
-        onError('No trace ID returned from server');
+        onError('No incident ID returned from server');
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.detail || err.message || 'Failed to submit incident';
