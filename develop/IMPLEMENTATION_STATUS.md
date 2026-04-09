@@ -68,12 +68,14 @@
 ```
 backend/
 ├── src/
-│   ├── agents/              (5 agents, ~3,900 LOC)
-│   │   ├── ingest_agent.py       (650 LOC) ✅
-│   │   ├── triage_agent.py       (800 LOC) ✅ + reasoning support
-│   │   ├── ticket_agent.py       (340 LOC) ✅
-│   │   ├── notify_agent.py       (430 LOC) ✅
-│   │   └── resolution_watcher.py (399 LOC) ✅
+│   ├── agents/              (7 agents, ~4,200 LOC)
+│   │   ├── ingest_agent.py            (650 LOC) ✅
+│   │   ├── triage_agent.py            (800 LOC) ✅ + reasoning support
+│   │   ├── qa_agent.py                (~88 LOC) ✅ NEW
+│   │   ├── fix_recommendation_agent.py (~88 LOC) ✅ NEW
+│   │   ├── ticket_agent.py            (340 LOC) ✅
+│   │   ├── notify_agent.py            (430 LOC) ✅
+│   │   └── resolution_watcher.py      (399 LOC) ✅
 │   ├── api/routes.py        (3 endpoints) ✅
 │   ├── infrastructure/
 │   │   ├── database.py      (ORM + schema) ✅ + enhanced for reasoning
@@ -186,7 +188,7 @@ make real
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| Multi-agent system | ✅ | 5 agents implemented |
+| Multi-agent system | ✅ | 7 agents implemented |
 | Multimodal input | ✅ | Text + image + logs |
 | Guardrails | ✅ | Prompt injection detection |
 | Observability | ✅ | Logs + trace_id + events API |

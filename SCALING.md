@@ -15,10 +15,10 @@ The MVP runs as a single Docker container with FastAPI, SQLite, and a background
 
 ## Scaling Bottlenecks Identified
 
-### 1. Synchronous LLM calls in TriageAgent
-**Current:** TriageAgent is called as a FastAPI BackgroundTask. Under load, multiple incidents queue in the same process.  
+### 1. Synchronous LLM calls in TriageAgent, QAAgent, and FixRecommendationAgent
+**Current:** Three agents make sequential LLM calls (TriageAgent → QAAgent → FixRecommendationAgent) in the same FastAPI BackgroundTask. Each call takes 5-30s; combined latency per incident can reach 60-90s under normal load.  
 **Bottleneck at:** ~10 concurrent incidents  
-**Phase 2 solution:** Message queue (RabbitMQ or AWS SQS). IngestAgent publishes to a queue. N TriageAgent workers consume in parallel. Workers are stateless — horizontal scaling is trivial.
+**Phase 2 solution:** Message queue (RabbitMQ or AWS SQS). IngestAgent publishes to a queue. N worker pools (one per agent type) consume in parallel. Workers are stateless — horizontal scaling is trivial.
 
 ### 2. SQLite as persistence layer
 **Current:** SQLite file (`data/incidents.db`) with SQLAlchemy ORM.  
@@ -86,18 +86,19 @@ The MVP runs as a single Docker container with FastAPI, SQLite, and a background
 
 ## Cost Analysis
 
-**Per incident (MVP, single call to Claude claude-sonnet-4-6):**
-- Input tokens: ~2,000 (system prompt + incident text + codebase context) ≈ $0.006
-- Output tokens: ~300 (triage result JSON) ≈ $0.006
-- Total LLM cost per incident: **~$0.012**
+**Per incident (MVP, 3 sequential LLM calls: TriageAgent + QAAgent + FixRecommendationAgent):**
+- TriageAgent: ~2,000 input tokens + ~300 output tokens ≈ $0.012
+- QAAgent: ~1,500 input tokens + ~400 output tokens ≈ $0.011
+- FixRecommendationAgent: ~2,000 input tokens + ~500 output tokens ≈ $0.015
+- Total LLM cost per incident: **~$0.038**
 
 **Daily cost projections:**
 | Volume | LLM cost/day | Notes |
 |---|---|---|
-| 10 incidents/day | ~$0.12 | Demo / small team |
-| 100 incidents/day | ~$1.20 | Growing startup |
-| 1,000 incidents/day | ~$12.00 | Mid-size e-commerce |
-| 10,000 incidents/day | ~$120.00 | Enterprise — consider caching frequent patterns |
+| 10 incidents/day | ~$0.38 | Demo / small team |
+| 100 incidents/day | ~$3.80 | Growing startup |
+| 1,000 incidents/day | ~$38.00 | Mid-size e-commerce |
+| 10,000 incidents/day | ~$380.00 | Enterprise — consider caching frequent patterns |
 
 **Cost optimization strategies:**
 - Cache triage results for identical/near-identical incident texts (semantic deduplication)
