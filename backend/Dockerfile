@@ -29,8 +29,9 @@ COPY backend/requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# Copy environment configuration
-COPY .env .
+# Copy environment configuration if present (optional — use env_file in docker-compose)
+COPY .env* ./
+RUN if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || true; fi
 
 # Copy source code
 COPY backend/src/ ./src/

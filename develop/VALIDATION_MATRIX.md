@@ -35,20 +35,34 @@ Este documento valida que **todos los agentes** soportan correctamente:
 | Stores triage result | ✅ | Database | Database |
 | **Status** | ✅ | **MOCKED** | **REAL** |
 
-**Code Reference**: `backend/src/agents/triage_agent.py` (lines 85-95)
+**Code Reference**: `backend/src/agents/triage_agent.py`
 
 ```python
 if self.settings.mock_integrations:
-    logger.info(f"[{trace_id}] MOCK MODE: Skipping LLM call...")
+    logger.info(f"[{trace_id}] MOCK MODE: Generating simulated triage with reasoning chain")
+    reasoning_chain = [
+        {"step": "symptom_analysis", "analysis": f"Primary symptom detected: '{incident_title}'..."},
+        {"step": "severity_assessment", "analysis": "Revenue impact: HIGH. Recommended severity: P2."},
+        {"step": "component_analysis", "analysis": "Pattern matching identifies Database service."},
+        {"step": "confidence_score", "analysis": "Keywords match known patterns with high confidence."},
+    ]
     triage_data = {
         "severity": "P2",
         "affected_module": "backend",
-        "technical_summary": "[MOCK] Simulated triage analysis...",
+        "technical_summary": "[MOCK] Simulated triage analysis. Real LLM disabled by MOCK_INTEGRATIONS=true",
         "suggested_files": ["src/api/handler.py", "src/services/cache.py"],
         "confidence_score": 0.8,
+        "reasoning_chain": reasoning_chain,  # ← Chain-of-thought incluido en mock y real
     }
 else:
-    # Real Claude call via self.llm_client.process_triage()
+    # Real Claude call — llm/client.py exige reasoning_chain en el JSON de respuesta
+    triage_data = self.llm_client.process_triage(
+        incident_title=incident_title,
+        incident_description=incident_description,
+        attachment_image_base64=attachment_image_base64,
+        attachment_log_text=attachment_log_text,
+        trace_id=trace_id,
+    )
 ```
 
 **Test**: ✅ VERIFIED with mock incident
@@ -378,6 +392,6 @@ If real mode integration doesn't work:
 ---
 
 **Document Status**: ✅ Complete  
-**Last Updated**: 2026-04-08  
-**Validation**: ✅ MOCK mode verified, REAL mode ready for credentialed testing  
-**Next Review**: When first real credentials are added
+**Last Updated**: 2026-04-08 23:00  
+**Validation**: ✅ MOCK mode verified (reasoning_chain incluido), REAL mode ready for credentialed testing  
+**Next Review**: Post-submission
