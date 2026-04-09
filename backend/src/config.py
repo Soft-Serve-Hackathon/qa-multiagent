@@ -1,8 +1,21 @@
 """Application configuration — loaded from environment variables via python-dotenv."""
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _resolve_medusa_repo_path() -> str:
+    """Resolve Medusa repo path from env, relative to project root when needed."""
+    raw = os.getenv("MEDUSA_REPO_PATH", os.getenv("ECOMMERCE_REPO_PATH", "./medusa-repo"))
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        return str(candidate)
+
+    # config.py is in backend/src, so project root is two levels up from backend/
+    project_root = Path(__file__).resolve().parents[2]
+    return str((project_root / candidate).resolve())
 
 
 class Settings:
@@ -42,7 +55,8 @@ class Settings:
     MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "10"))
 
     # Medusa.js repo path (mounted as Docker volume)
-    MEDUSA_REPO_PATH: str = os.getenv("MEDUSA_REPO_PATH", "./medusa-repo")
+    # Backward compatible with legacy ECOMMERCE_REPO_PATH name.
+    MEDUSA_REPO_PATH: str = _resolve_medusa_repo_path()
 
     # ResolutionWatcher
     RESOLUTION_WATCHER_INTERVAL_SECONDS: int = int(

@@ -59,4 +59,5 @@ htmlcov/
 hackathon/
 develop/
 tasks/done/
+medusa-repo/
 *.auxlock
