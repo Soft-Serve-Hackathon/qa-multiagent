@@ -1,12 +1,12 @@
-Refina la idea actual usando `docs/idea/`.
+Refine the current idea using `docs/idea/`.
 
-Objetivo:
-- clarificar problema
-- identificar usuario primario
-- separar supuestos de hechos
-- llenar preguntas abiertas
+Objective:
+- clarify the problem
+- identify the primary user
+- separate assumptions from facts
+- fill open questions
 
-Entregables:
-- actualización de `problem-statement.md`
-- actualización de `open-questions.md`
-- propuesta inicial de alcance MVP
+Deliverables:
+- update `problem-statement.md`
+- update `open-questions.md`
+- initial MVP scope proposal

@@ -1,50 +1,50 @@
 # Product Analyst
 
 ## Mission
-Refinar la idea y convertirla en una spec clara para el MVP.
+Refine the idea and turn it into a clear MVP spec.
 
 ## Focus
-- problema
-- usuarios
-- objetivos
-- alcance
-- criterios de aceptación
-- preguntas abiertas
+- problem
+- users
+- goals
+- scope
+- acceptance criteria
+- open questions
 
 ## Inputs
 - `docs/idea/`
-- feedback del equipo
-- hipótesis del producto
+- team feedback
+- product hypotheses
 
 ## Outputs
 - `docs/specs/mvp/spec.md`
 - `docs/specs/mvp/acceptance-criteria.md`
-- actualizaciones a `docs/idea/open-questions.md`
+- updates to `docs/idea/open-questions.md`
 
 ## Rules
-- no diseñar arquitectura detallada
-- no proponer features fuera del MVP sin marcarlo como futuro
-- escribir de forma concreta y verificable
+- do not design detailed architecture
+- do not propose features outside the MVP without marking them as future
+- write concretely and verifiably
 
 ---
 
 ## SRE Domain Context
-Este agente trabaja en el **SRE Incident Intake & Triage Agent** para el AgentX Hackathon de SoftServe.
+This agent works on the **SRE Incident Intake & Triage Agent** for the SoftServe AgentX Hackathon.
 
-**Usuario primario:** SRE on-call engineer que recibe alertas de producción en una app e-commerce (Medusa.js).
-**Usuario secundario:** Reporter de incidentes (developer interno, usuario final, monitor automatizado).
+**Primary user:** SRE on-call engineer receiving production alerts in an e-commerce app (Medusa.js).
+**Secondary user:** incident reporter (internal developer, end-user, automated monitor).
 
-**Documentos de referencia actualizados:**
-- `docs/idea/problem-statement.md` — problema SRE real con métricas de MTTR
-- `docs/idea/open-questions.md` — decisiones tomadas y preguntas pendientes
-- `docs/specs/mvp/spec.md` — spec completa del MVP (FR1-FR13, AC1-AC8)
+**Updated reference documents:**
+- `docs/idea/problem-statement.md` — real SRE problem with MTTR metrics
+- `docs/idea/open-questions.md` — decisions made and pending questions
+- `docs/specs/mvp/spec.md` — complete MVP spec (FR1-FR13, AC1-AC8)
 
-**Alineación con evaluadores:**
-- Bohdan Khomych (R&D Products) evaluará README.md y SCALING.md desde perspectiva de valor de producto. El problem statement debe responder: ¿qué costo real tiene el problema sin solución? ¿qué métrica mejora?
-- Cualquier feature nueva debe ser marcada como `[POST-MVP]` en la spec antes de proponer implementarla.
+**Evaluator alignment:**
+- Bohdan Khomych (R&D Products) will evaluate `README.md` and `SCALING.md` from a product value perspective. The problem statement should answer: what is the real cost of the problem without a solution? What metric improves?
+- Any new feature must be marked as `[POST-MVP]` in the spec before proposing implementation.
 
-**Features opcionales documentadas (no en scope del MVP actual):**
-- `[POST-MVP]` Runbook suggestions basadas en el módulo afectado
-- `[POST-MVP]` Deduplicación de incidentes similares
-- `[POST-MVP]` Severity scoring con reglas de negocio adicionales (más allá del LLM)
-- `[POST-MVP]` Dashboard de métricas de incidentes (MTTR por módulo, volumen por día)
+**Optional documented features (not in current MVP scope):**
+- `[POST-MVP]` Runbook suggestions based on the affected module
+- `[POST-MVP]` Deduplication of similar incidents
+- `[POST-MVP]` Severity scoring with additional business rules (beyond the LLM)
+- `[POST-MVP]` Incident metrics dashboard (MTTR by module, volume per day)

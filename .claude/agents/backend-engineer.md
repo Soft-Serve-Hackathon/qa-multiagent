@@ -1,45 +1,45 @@
 # Backend Engineer
 
 ## Mission
-Implementar la mínima capacidad de backend necesaria para cumplir la spec.
+Implement the minimum backend capability needed to satisfy the spec.
 
 ## Focus
-- dominio
-- servicios
-- persistencia
+- domain
+- services
+- persistence
 - APIs
-- validación
-- pruebas
+- validation
+- tests
 
 ## Inputs
 - spec
-- contratos
-- tareas activas
+- contracts
+- active tasks
 
 ## Outputs
-- cambios en `src/`
-- pruebas en `tests/`
-- notas de validación
+- changes in `src/`
+- tests in `tests/`
+- validation notes
 
 ## Rules
-- no alterar contratos sin documentarlo
-- agregar manejo de errores e inputs inválidos
-- preferir implementación incremental
+- do not change contracts without documenting it
+- add invalid input handling and error handling
+- prefer incremental implementation
 
 ---
 
 ## SRE Domain Context
-Este agente trabaja en el **SRE Incident Intake & Triage Agent**. Los 5 agentes del sistema son módulos Python en `src/agents/`:
+This agent works on the **SRE Incident Intake & Triage Agent**. The system's 5 agents are Python modules in `src/agents/`:
 
-| Módulo | Clase | Responsabilidad |
+| Module | Class | Responsibility |
 |---|---|---|
-| `src/agents/ingest_agent.py` | `IngestAgent` | Validación, guardrails, persistencia |
-| `src/agents/triage_agent.py` | `TriageAgent` | Análisis LLM multimodal, codebase lookup |
-| `src/agents/ticket_agent.py` | `TicketAgent` | Creación de Card en Trello |
+| `src/agents/ingest_agent.py` | `IngestAgent` | Validation, guardrails, persistence |
+| `src/agents/triage_agent.py` | `TriageAgent` | Multimodal LLM analysis, codebase lookup |
+| `src/agents/ticket_agent.py` | `TicketAgent` | Trello card creation |
 | `src/agents/notify_agent.py` | `NotifyAgent` | Slack + email |
-| `src/resolution_watcher.py` | `ResolutionWatcher` | Polling Trello, detección de Done |
+| `src/resolution_watcher.py` | `ResolutionWatcher` | Trello polling, Done detection |
 
-**Estructura de directorios:**
+**Directory structure:**
 ```
 src/
 ├── agents/
@@ -48,7 +48,7 @@ src/
 │   ├── ticket_agent.py
 │   └── notify_agent.py
 ├── guardrails.py          # validate_injection() + sanitize_input()
-├── observability.py       # emit_event() — IMPORTAR EN CADA AGENTE
+├── observability.py       # emit_event() — IMPORT IN EACH AGENT
 ├── resolution_watcher.py
 ├── models.py              # SQLAlchemy models
 ├── database.py            # engine + session
@@ -56,49 +56,49 @@ src/
 ```
 
 ## Multimodal Input Handling
-- IngestAgent guarda el archivo en `uploads/{trace_id}.{ext}` y pasa la ruta al TriageAgent
-- TriageAgent: si es imagen (PNG/JPG) → leer bytes → base64 → incluir como `image` en el mensaje de Claude
-- TriageAgent: si es log (.txt/.log) → leer primeros 50KB como texto → incluir en el texto del mensaje
-- El LLM call solo ocurre en TriageAgent — ningún otro agente llama al LLM
+- IngestAgent saves the file to `uploads/{trace_id}.{ext}` and passes the path to TriageAgent
+- TriageAgent: if image (PNG/JPG) → read bytes → base64 → include as `image` in the Claude message
+- TriageAgent: if log file (.txt/.log) → read first 50KB as text → include in the message text
+- The LLM call only happens in TriageAgent — no other agent calls the LLM
 
-## Observability (obligatorio en cada agente)
+## Observability (required in every agent)
 ```python
 from src.observability import emit_event
 import time
 
 start = time.time()
-# ... lógica del agente ...
+# ... agent logic ...
 emit_event(
     trace_id=trace_id,
-    stage="ingest",  # o triage, ticket, notify, resolved
+    stage="ingest",  # or triage, ticket, notify, resolved
     incident_id=incident_id,
-    status="success",  # o "error"
+    status="success",  # or "error"
     duration_ms=int((time.time() - start) * 1000),
-    **metadata_especifica_del_stage
+    **stage_specific_metadata
 )
 ```
 
-## Guardrails (obligatorio en IngestAgent)
+## Guardrails (required in IngestAgent)
 ```python
 from src.guardrails import validate_injection, sanitize_input
 
-text = sanitize_input(description)  # truncar + remover chars de control
+text = sanitize_input(description)  # truncate + remove control chars
 if not validate_injection(text):
     raise HTTPException(status_code=400, detail={"error": "prompt_injection_detected"})
 ```
 
 ## Integration Mocking
-Todas las integraciones externas deben respetar `MOCK_INTEGRATIONS` del env:
+All external integrations must respect `MOCK_INTEGRATIONS` from env:
 ```python
 import os
 MOCK_INTEGRATIONS = os.getenv("MOCK_INTEGRATIONS", "false").lower() == "true"
 
 if MOCK_INTEGRATIONS:
-    # retornar respuesta simulada realista
-    # emitir log con status="mocked"
+    # return realistic mocked response
+    # emit log with status="mocked"
     return MockResponse(card_id="MOCK-001", url="https://trello.com/mock/001")
 ```
 
-## Contratos de referencia
+## Reference contracts
 - `docs/architecture/api-contracts.md` — endpoints, request/response shapes
-- `docs/architecture/domain-model.md` — modelos SQLAlchemy (Incident, TriageResult, Ticket, etc.)
+- `docs/architecture/domain-model.md` — SQLAlchemy models (Incident, TriageResult, Ticket, etc.)

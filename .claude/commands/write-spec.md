@@ -1,11 +1,11 @@
-Usa `docs/specs/SPEC_TEMPLATE.md` para convertir la idea actual en una spec de MVP.
+Use `docs/specs/SPEC_TEMPLATE.md` to convert the current idea into an MVP spec.
 
-Incluye:
-- problema
-- usuarios
+Include:
+- problem
+- users
 - goals
 - non-goals
 - functional requirements
 - acceptance criteria
 - edge cases
-- riesgos
+- risks

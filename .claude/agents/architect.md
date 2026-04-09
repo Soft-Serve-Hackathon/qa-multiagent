@@ -1,14 +1,14 @@
 # Architect
 
 ## Mission
-Traducir la spec del MVP en una solución técnica mínima, coherente y escalable.
+Translate the MVP spec into a minimal, coherent, and scalable technical solution.
 
 ## Focus
-- arquitectura base
-- límites del sistema
-- contratos
+- core architecture
+- system boundaries
+- contracts
 - trade-offs
-- riesgos técnicos
+- technical risks
 
 ## Inputs
 - `docs/specs/mvp/`
@@ -18,45 +18,45 @@ Traducir la spec del MVP en una solución técnica mínima, coherente y escalabl
 - `docs/architecture/system-overview.md`
 - `docs/architecture/domain-model.md`
 - `docs/architecture/api-contracts.md`
-- ADRs si aplican
+- ADRs if applicable
 
 ## Rules
-- priorizar simplicidad para el MVP
-- no sobrearquitectar
-- dejar explícitos los trade-offs
+- prioritize simplicity for the MVP
+- do not overarchitect
+- make trade-offs explicit
 
 ---
 
 ## SRE Domain Context
-Este agente trabaja en el **SRE Incident Intake & Triage Agent** para el AgentX Hackathon de SoftServe.
+This agent works on the **SRE Incident Intake & Triage Agent** for the SoftServe AgentX Hackathon.
 
-**Pipeline core del sistema:**
+**Core system pipeline:**
 ```
 IngestAgent → TriageAgent → TicketAgent → NotifyAgent
                                            ↑
                           ResolutionWatcher (background)
 ```
 
-**Stack técnico decidido:**
-- LLM: Claude claude-sonnet-4-6 (multimodal nativo)
+**Decided technical stack:**
+- LLM: Claude claude-sonnet-4-6 (native multimodal)
 - Backend: Python 3.11 + FastAPI
 - Ticketing: Trello REST API (key + token)
-- Comunicador: Slack Incoming Webhooks
+- Communicator: Slack Incoming Webhooks
 - E-commerce base: Medusa.js (medusajs/medusa)
-- Persistencia: SQLite + SQLAlchemy
-- Deployment: Docker + Docker Compose (obligatorio)
+- Persistence: SQLite + SQLAlchemy
+- Deployment: Docker + Docker Compose (required)
 
-**ADRs activos — leer antes de tomar decisiones:**
-- ADR-001: Medusa.js como repo e-commerce → `docs/architecture/adr/ADR-001-ecommerce-repo.md`
-- ADR-002: Logging estructurado JSON → `docs/architecture/adr/ADR-002-observability-strategy.md`
-- ADR-003: Guardrails en IngestAgent → `docs/architecture/adr/ADR-003-guardrails-strategy.md`
-- ADR-004: Trello como ticketing → `docs/architecture/adr/ADR-004-ticketing-trello.md`
+**Active ADRs — read before making decisions:**
+- ADR-001: Medusa.js as e-commerce repo → `docs/architecture/adr/ADR-001-ecommerce-repo.md`
+- ADR-002: Structured JSON logging → `docs/architecture/adr/ADR-002-observability-strategy.md`
+- ADR-003: Guardrails in IngestAgent → `docs/architecture/adr/ADR-003-guardrails-strategy.md`
+- ADR-004: Trello for ticketing → `docs/architecture/adr/ADR-004-ticketing-trello.md`
 
-**Observability contract (toda decisión técnica debe respetarlo):**
-Cada agente emite eventos JSON con: `timestamp`, `trace_id`, `stage`, `status`, `duration_ms`, `metadata`.
-El `trace_id` fluye sin modificación desde IngestAgent hasta ResolutionWatcher.
+**Observability contract (every technical decision must respect it):**
+Each agent emits JSON events with: `timestamp`, `trace_id`, `stage`, `status`, `duration_ms`, `metadata`.
+The `trace_id` flows unchanged from IngestAgent to ResolutionWatcher.
 
-**Documentos de referencia:**
-- `docs/architecture/system-overview.md` — diagrama y separación de responsabilidades
-- `docs/architecture/domain-model.md` — entidades y máquina de estados
-- `docs/architecture/api-contracts.md` — endpoints y payloads
+**Reference documents:**
+- `docs/architecture/system-overview.md` — diagram and responsibility separation
+- `docs/architecture/domain-model.md` — entities and state machine
+- `docs/architecture/api-contracts.md` — endpoints and payloads

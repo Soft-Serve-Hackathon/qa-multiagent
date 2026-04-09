@@ -1,45 +1,45 @@
 # Copilot Repository Instructions
 
-Este repositorio sigue una metodología basada en especificaciones y agentes especializados.
+This repository follows a methodology based on specifications and specialized agents.
 
-## Antes de sugerir código
+## Before suggesting code
 
-1. revisa `README.md`
-2. revisa `AGENTS.md`
-3. revisa la spec relevante en `docs/specs/`
-4. revisa contratos y decisiones en `docs/architecture/`
-5. revisa la tarea activa si existe en `tasks/active/`
+1. review `README.md`
+2. review `AGENTS.md`
+3. review the relevant spec in `docs/specs/`
+4. review contracts and decisions in `docs/architecture/`
+5. review the active task if one exists in `tasks/active/`
 
-## Flujo preferido de trabajo
+## Preferred workflow
 
-1. revisar idea y open questions
-2. consolidar spec
-3. revisar arquitectura
-4. descomponer tareas
-5. implementar una tarea a la vez
-6. validar
-7. documentar handoff
+1. review idea and open questions
+2. consolidate the spec
+3. review architecture
+4. break work into tasks
+5. implement one task at a time
+6. validate
+7. document handoff
 
-## Reglas
+## Rules
 
-- genera cambios pequeños y consistentes con la spec
-- no inventes alcance de producto
-- evita lógica no validada por criterios de aceptación
-- cuando el cambio afecte diseño, sugiere documentarlo
-- incluye pruebas o estrategia de validación cuando corresponda
-- respeta separación de responsabilidades entre frontend, backend, QA y seguridad
+- make small changes consistent with the spec
+- do not invent product scope
+- avoid logic not validated by acceptance criteria
+- when a change affects design, suggest documenting it
+- include tests or a validation strategy when applicable
+- respect separation of responsibilities between frontend, backend, QA, and security
 
-## Prioridades
+## Priorities
 
-1. claridad
-2. corrección
-3. mantenibilidad
-4. validabilidad
-5. velocidad
+1. clarity
+2. correctness
+3. maintainability
+4. verifiability
+5. speed
 
-## Formato esperado de ayuda
+## Expected help format
 
-Responde preferiblemente con esta estructura:
+Preferably respond with this structure:
 
 1. Understanding
 2. Plan
@@ -50,18 +50,18 @@ Responde preferiblemente con esta estructura:
 
 ## Done Checklist
 
-Antes de cerrar una tarea, confirma:
+Before closing a task, confirm:
 
-- contexto leído
-- archivos impactados identificados
-- criterios de aceptación cubiertos
-- pruebas o validación ejecutadas
-- riesgos documentados
-- handoff preparado
+- context read
+- impacted files identified
+- acceptance criteria covered
+- tests or validation executed
+- risks documented
+- handoff prepared
 
 ## Guardrails
 
-- evita refactors masivos no solicitados
-- no borres documentación sin reemplazo claro
-- no asumas requisitos no escritos
-- si detectas huecos, escríbelos en `docs/idea/open-questions.md` o en el handoff
+- avoid unsolicited large refactors
+- do not delete documentation without a clear replacement
+- do not assume unwritten requirements
+- if you find gaps, write them in `docs/idea/open-questions.md` or in the handoff
