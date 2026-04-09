@@ -771,12 +771,12 @@ INJECTION_PATTERNS = [
 ### Recommendations for Next Phase
 
 1. **Add LLM retry logic** — if Claude fails, queue for retry (not just fail-fast)
-2. **Implement incident deduplication** — prevent ticket spam
+2. **Vector embeddings for deduplication** — replace `SequenceMatcher` with ChromaDB/Pinecone for semantic matching across paraphrased descriptions (current implementation uses 75% string similarity, which handles most cases)
 3. **Vector DB for codebase** — improve `suggested_files` accuracy
 4. **Multi-tenant support** — route to different Trello boards per team
 5. **Webhook integration** — real-time resolution detection (not polling)
 6. **Human review queue** — let SREs approve before Slack notification
-7. **Metrics dashboard** — visualize incident volume, triage speed, resolution time
+7. **Prometheus metrics dashboard** — visualize incident volume, triage speed, resolution time
 
 ---
 
