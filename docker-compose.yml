@@ -14,7 +14,8 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./uploads:/app/uploads
-      - ./medusa-repo:/app/medusa-repo:ro
+      # medusa-repo is cloned inside the image at build time (see backend/Dockerfile)
+      # Do NOT mount ./medusa-repo here — an empty local dir would override the cloned repo
     environment:
       - DATABASE_URL=sqlite:///./data/incidents.db
       - DEBUG=false
