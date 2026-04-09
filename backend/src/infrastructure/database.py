@@ -20,6 +20,7 @@ from sqlalchemy import (
     Text,
     create_engine,
     event,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -167,7 +168,6 @@ class ObservabilityEventModel(Base):
 def create_tables() -> None:
     """Create all tables if they don't exist. Safe to call multiple times."""
     import os
-    # Ensure the data directory exists for SQLite
     settings = get_settings()
     if settings.database_url.startswith("sqlite:///"):
         db_path = settings.database_url.replace("sqlite:///", "")
@@ -176,3 +176,26 @@ def create_tables() -> None:
             os.makedirs(db_dir, exist_ok=True)
 
     Base.metadata.create_all(bind=engine)
+    _run_migrations()
+
+
+def _run_migrations() -> None:
+    """
+    Lightweight inline migrations for schema changes that create_all cannot handle
+    (adding columns to existing tables). Safe to run on every startup — each
+    ALTER TABLE is wrapped in a try/except so it silently skips if the column
+    already exists (SQLite raises OperationalError for duplicate columns).
+    """
+    migrations = [
+        "ALTER TABLE incidents ADD COLUMN linked_ticket_id INTEGER REFERENCES tickets(id)",
+        "ALTER TABLE triage_results ADD COLUMN reasoning_chain TEXT",
+    ]
+
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                # Column already exists — skip silently
+                pass

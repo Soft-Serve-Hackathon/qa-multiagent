@@ -68,6 +68,57 @@ class ObservabilityEventsListResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/dashboard/stats — response
+# ---------------------------------------------------------------------------
+
+class SeverityBreakdown(BaseModel):
+    P1: int = 0
+    P2: int = 0
+    P3: int = 0
+    P4: int = 0
+
+
+class StatusBreakdown(BaseModel):
+    received: int = 0
+    triaging: int = 0
+    deduplicated: int = 0
+    ticketed: int = 0
+    notified: int = 0
+    resolved: int = 0
+
+
+class ModuleCount(BaseModel):
+    module: str
+    count: int
+
+
+class RecentIncident(BaseModel):
+    incident_id: int
+    trace_id: str
+    title: str
+    status: str
+    severity: Optional[str] = None
+    affected_module: Optional[str] = None
+    confidence_score: Optional[float] = None
+    ticket_id: Optional[str] = None
+    ticket_url: Optional[str] = None
+    deduplicated: bool = False
+    created_at: datetime
+
+
+class DashboardStatsResponse(BaseModel):
+    total_incidents: int
+    severity_breakdown: SeverityBreakdown
+    status_breakdown: StatusBreakdown
+    top_modules: list[ModuleCount]
+    avg_triage_ms: Optional[float] = None
+    avg_ticket_ms: Optional[float] = None
+    deduplication_rate: float = 0.0          # 0.0–1.0
+    recent_incidents: list[RecentIncident]
+    pipeline_success_rate: float = 0.0       # 0.0–1.0
+
+
+# ---------------------------------------------------------------------------
 # Error responses
 # ---------------------------------------------------------------------------
 

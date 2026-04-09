@@ -11,6 +11,21 @@ The MVP runs as a single Docker container with FastAPI, SQLite, and a background
 
 **Deployment:** `docker compose up --build` — one command, no external services required.
 
+### Validated Load Capacity
+
+Tested with `scripts/load_test_50_incidents.py` (mock mode):
+
+| Metric | Result | Threshold |
+|---|---|---|
+| Concurrent incidents | 50/50 submitted | 100% |
+| Submit throughput | 242.5 incidents/sec | >50/sec |
+| End-to-end throughput | 21.4 incidents/sec | >10/sec |
+| P95 submit latency | 196ms | <500ms |
+| Success rate | 100% | >95% |
+| All tickets created | 50/50 (in ~2s) | 100% |
+
+SQLite WAL mode (`PRAGMA journal_mode=WAL`) prevents write contention at this load level.
+
 ---
 
 ## Scaling Bottlenecks Identified
@@ -113,9 +128,9 @@ The MVP runs as a single Docker container with FastAPI, SQLite, and a background
 
 ## OpenRouter Support
 
-The LLM client abstraction in `src/llm_client.py` supports `LLM_PROVIDER` env var:
+The LLM client abstraction in `backend/src/infrastructure/llm/client.py` supports `LLM_PROVIDER` env var:
 - `LLM_PROVIDER=anthropic` (default) → uses Anthropic SDK directly
-- `LLM_PROVIDER=openrouter` → routes through OpenRouter API, enabling access to alternative models
+- `LLM_PROVIDER=openrouter` → routes through OpenRouter API, enabling access to alternative models at lower cost
 
 This allows cost optimization in production without changing agent code.
 

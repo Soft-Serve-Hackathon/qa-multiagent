@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import IncidentForm from './components/IncidentForm';
 import StatusTracker from './components/StatusTracker';
 
@@ -30,13 +31,23 @@ export default function Home() {
 
   return (
     <main className="container-custom">
-      <header className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 mb-1">
-          SRE Incident Triage
-        </h1>
-        <p className="text-sm text-slate-500">
-          Report production issues and get instant AI-powered analysis
-        </p>
+      <header className="mb-8">
+        <div className="flex items-center justify-end mb-4">
+          <Link
+            href="/dashboard"
+            className="text-xs text-slate-500 hover:text-slate-800 border border-slate-300 hover:border-slate-400 px-3 py-1.5 rounded-lg bg-white transition-colors"
+          >
+            📊 Dashboard
+          </Link>
+        </div>
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-slate-900 mb-1">
+            SRE Incident Triage
+          </h1>
+          <p className="text-sm text-slate-500">
+            Report production issues and get instant AI-powered analysis
+          </p>
+        </div>
       </header>
 
       <div className="bg-white rounded-2xl shadow-md p-8">
