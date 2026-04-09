@@ -19,8 +19,8 @@ interface RecentIncident {
   severity?: string;
   affected_module?: string;
   confidence_score?: number;
-  ticket_id?: string;
-  ticket_url?: string;
+  trello_card_id?: string;
+  trello_card_url?: string;
   deduplicated: boolean;
   created_at: string;
 }
@@ -372,14 +372,14 @@ export default function Dashboard() {
                           {timeAgo(inc.created_at)}
                         </td>
                         <td className="px-4 py-3">
-                          {inc.ticket_url ? (
+                          {inc.trello_card_url ? (
                             <a
-                              href={inc.ticket_url}
+                              href={inc.trello_card_url}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
                             >
-                              {inc.ticket_id ? inc.ticket_id.replace('MOCK-', '') : 'View'} ↗
+                              {inc.trello_card_id ? inc.trello_card_id.replace('mock-trello-', '#') : 'View'} ↗
                             </a>
                           ) : (
                             <span className="text-slate-400 text-xs">—</span>
