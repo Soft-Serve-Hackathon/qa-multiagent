@@ -27,12 +27,12 @@
 
 ### System Overview
 
-The system implements a pipeline of **5 specialized agents** with unique, non-overlapping responsibilities. Each agent is stateless (state lives in SQLite). The LLM is invoked **only by TriageAgent** — all other agents are deterministic integrations.
+The system implements a pipeline of **7 specialized agents** with unique, non-overlapping responsibilities. Each agent is stateless (state lives in SQLite). The LLM is invoked by **TriageAgent, QAAgent, and FixRecommendationAgent** — all three use Claude claude-sonnet-4-6 with an agentic tool-use loop over the Medusa.js codebase.
 
 ```
-IngestAgent → TriageAgent → TicketAgent → NotifyAgent
-                                          ↑
-                         ResolutionWatcher (background)
+IngestAgent → TriageAgent → QAAgent → FixRecommendationAgent → TicketAgent → NotifyAgent
+                                                                               ↑
+                                                            ResolutionWatcher (background)
 ```
 
 A single `trace_id` (UUID v4) is assigned at ingestion and flows through every agent, enabling end-to-end observability.
@@ -119,6 +119,49 @@ A single `trace_id` (UUID v4) is assigned at ingestion and flows through every a
   }
 }
 ```
+
+---
+
+### Agent: QAAgent
+
+| Field | Description |
+|-------|-------------|
+| **Role** | QA scope assessor. Finds existing tests for the affected module and proposes regression tests if missing. |
+| **Type** | Autonomous (LLM with agentic tool-use loop) |
+| **LLM** | Claude claude-sonnet-4-6 — QA_SCOPE_SYSTEM_PROMPT, up to 10 tool-call rounds |
+| **Inputs** | `TriageResultDTO` (severity, affected_module, suggested_files, technical_summary) |
+| **Outputs** | `QAScopeDTO` persisted in `qa_scope_results` table |
+| **Tools** | `list_ecommerce_files`, `read_ecommerce_file` — scans Medusa.js test directories |
+
+**Behavior:**
+- Locates test files under `packages/modules/<module>/integration-tests/__tests__/services/`
+- Assesses whether the incident scenario is covered by existing tests
+- If not covered, proposes a minimal TypeScript/Jest regression test snippet
+- On failure: sets `qa_incomplete=True`, pipeline continues (non-blocking)
+
+**Observability event:** `stage=qa_scope`, includes `reproduced`, `failing_tests_count`, `new_tests_count`, `coverage_files_found`, `module`
+
+---
+
+### Agent: FixRecommendationAgent
+
+| Field | Description |
+|-------|-------------|
+| **Role** | Fix proposer. Reads affected source files and produces a concrete technical fix recommendation with risk assessment. |
+| **Type** | Autonomous (LLM with agentic tool-use loop) |
+| **LLM** | Claude claude-sonnet-4-6 — FIX_RECOMMENDATION_SYSTEM_PROMPT, up to 10 tool-call rounds |
+| **Inputs** | `TriageResultDTO` + `QAScopeDTO` |
+| **Outputs** | `FixRecommendationDTO` persisted in `fix_recommendation_results` table |
+| **Tools** | `list_ecommerce_files`, `read_ecommerce_file` — reads the specific files identified in triage |
+
+**Behavior:**
+- Reads the exact source files identified by TriageAgent
+- Proposes a concrete fix (code snippet level) addressing the root cause
+- Assesses risk: `low` (isolated, test coverage exists) / `medium` / `high` (wide impact)
+- Describes post-fix tests to validate the fix
+- On failure: sets `fix_incomplete=True`, pipeline continues (non-blocking)
+
+**Observability event:** `stage=fix_recommendation`, includes `risk_level`, `proposed_files_count`, `module`
 
 ---
 
@@ -470,14 +513,16 @@ The TriageAgent manages context from multiple sources to ground its analysis in 
 
 ### Metrics
 
-**Per-agent latency** (from event `duration_ms`):
-- **IngestAgent:** avg ~45ms (validation + DB insert)
-- **TriageAgent:** avg ~2341ms (LLM call + file reads)
-- **TicketAgent:** avg ~312ms (Trello API call)
-- **NotifyAgent:** avg ~187ms (Slack + email dispatch)
-- **ResolutionWatcher:** avg ~89ms (Trello read + link)
+**Per-agent latency** (from event `duration_ms`, real measurements):
+- **IngestAgent:** avg ~5ms (validation + DB insert)
+- **TriageAgent:** avg ~50s (Claude agentic loop, up to 10 tool-call rounds over Medusa.js codebase)
+- **QAAgent:** avg ~60s (Claude agentic loop, scans test directories)
+- **FixRecommendationAgent:** avg ~90-120s (Claude agentic loop, reads source files + proposes fix)
+- **TicketAgent:** avg ~10ms (deduplication check + Trello API)
+- **NotifyAgent:** avg ~5ms (Slack + email dispatch)
+- **ResolutionWatcher:** avg ~200ms (Trello polling + DB update)
 
-**Total pipeline latency:** ~3,000ms (3 sec) from incident submission to reporter email
+**Total pipeline latency:** ~3-5 minutes end-to-end (LLM agentic loops dominate; Anthropic rate limits may add retries)
 
 ### Evidence
 
@@ -610,8 +655,8 @@ INJECTION_PATTERNS = [
 | Dimension | MVP Capacity | Constraint |
 |---|---|---|
 | **Concurrent incidents** | ~10 active (limited by SQLite write locks) | Single Uvicorn worker + SQLite transactions |
-| **Incident throughput** | ~20 incidents/hour | LLM latency: 2-5 sec per incident (bottleneck) |
-| **LLM call latency** | 2-5 seconds per incident | Claude API response time (external) |
+| **Incident throughput** | ~12-20 incidents/hour | LLM agentic loop: 3-5 min per incident (3 sequential LLM agents) |
+| **LLM call latency** | 3-5 min per incident | 3 agentic loops (triage + qa + fix), each up to 10 tool-call rounds |
 | **Disk storage** | Unlimited (logs + SQLite on volume) | Docker volume size (configurable) |
 | **User base** | Single team, one Trello board | No multi-tenant isolation |
 

@@ -11,10 +11,10 @@ A multi-agent system that converts incident reports (text + screenshot or log fi
 
 **Core pipeline:**
 ```
-[Reporter submits incident] → [Triage by Claude claude-sonnet-4-6] → [Trello card created]
-                           → [Slack #incidents notified]
-                           → [Reporter confirmed by email]
-                           → [Reporter notified on resolution]
+[Reporter] → IngestAgent → TriageAgent → QAAgent → FixRecommendationAgent → TicketAgent → NotifyAgent
+                            (Claude claude-sonnet-4-6 + Medusa.js codebase)
+                                                          ↑ background
+                                                   ResolutionWatcher → NotifyAgent (on resolve)
 ```
 
 ---
@@ -34,13 +34,13 @@ Every minute of downtime in e-commerce has a direct cost in lost revenue. This s
 ```
 ┌─────────────────┐     POST /api/incidents
 │   Web UI Form   │ ──────────────────────────────────────────┐
-│  (HTML + JS)    │                                            │
+│  (Next.js)      │                                            │
 └─────────────────┘                                            ▼
                                                     ┌─────────────────┐
                                                     │  IngestAgent    │
                                                     │  • Guardrails   │
                                                     │  • trace_id     │
-                                                    │  • SQLite       │
+                                                    │  • File upload  │
                                                     └────────┬────────┘
                                                              │
                                                              ▼
@@ -50,17 +50,35 @@ Every minute of downtime in e-commerce has a direct cost in lost revenue. This s
                                         │  • Multimodal (image + log)    │
                                         │  • Medusa.js codebase lookup   │
                                         │  • severity / module / files   │
+                                        │  • reasoning_chain (5 steps)   │
+                                        └────────────┬───────────────────┘
+                                                     │
+                                                     ▼
+                                        ┌────────────────────────────────┐
+                                        │          QAAgent               │
+                                        │  • Finds existing tests        │
+                                        │  • Proposes regression tests   │
+                                        │  • Scans Medusa.js test suite  │
+                                        └────────────┬───────────────────┘
+                                                     │
+                                                     ▼
+                                        ┌────────────────────────────────┐
+                                        │    FixRecommendationAgent      │
+                                        │  • Reads affected source files │
+                                        │  • Proposes concrete fix       │
+                                        │  • Assesses risk level         │
                                         └────────────┬───────────────────┘
                                                      │
                                           ┌──────────┴──────────┐
                                           ▼                      ▼
                                ┌─────────────────┐   ┌──────────────────┐
                                │  TicketAgent    │   │   NotifyAgent    │
-                               │  • Trello API   │   │  • Slack webhook │
-                               │  • Card + labels│   │  • Email (SMTP)  │
+                               │  • Deduplication│   │  • Slack webhook │
+                               │  • Trello card  │   │  • Email (SMTP)  │
+                               │  • Owner routing│   │  • Reporter CC   │
                                └─────────────────┘   └──────────────────┘
 
-                    (background job)
+                    (background thread)
                     ┌─────────────────────────────┐
                     │      ResolutionWatcher       │
                     │  • Polls Trello every 60s   │

@@ -14,12 +14,14 @@ const nextConfig = {
   },
 
   // CORS and rewrites for API calls
+  // Uses API_URL (server-side) so Docker inter-container networking works correctly
   async rewrites() {
+    const apiUrl = process.env.API_URL || 'http://localhost:8000/api';
     return {
       beforeFiles: [
         {
           source: '/api/:path*',
-          destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/:path*`,
+          destination: `${apiUrl}/:path*`,
         },
       ],
     };
