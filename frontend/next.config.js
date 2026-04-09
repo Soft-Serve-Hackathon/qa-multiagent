@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   
   // Environment variables for API communication
   env: {
@@ -18,7 +19,7 @@ const nextConfig = {
       beforeFiles: [
         {
           source: '/api/:path*',
-          destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/:path*`,
+          destination: `${process.env.API_INTERNAL_URL || 'http://backend:8000/api'}/:path*`,
         },
       ],
     };

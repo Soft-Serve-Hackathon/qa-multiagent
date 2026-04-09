@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest backend/tests/unit/test_guardrails.py -v)",
+      "Bash(python -m pytest backend/tests/unit/test_guardrails.py -v --tb=short)",
+      "Bash(python -m pytest backend/tests/integration/test_pipeline.py -v --tb=short)",
+      "Bash(python -m pytest backend/tests/ -v --tb=short)",
+      "Bash(python -c ':*)",
+      "Bash(curl -s http://localhost:8000/api/health)"
+    ]
+  }
+}

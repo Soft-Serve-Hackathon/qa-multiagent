@@ -1,42 +1,50 @@
-# Dockerfile for Frontend (Vanilla HTML/CSS/JS)
-# Build: docker build -t qa-multiagent-frontend:latest ./frontend
+# Dockerfile for Frontend (Next.js 14)
+# Build context: repo root (set in docker-compose.yml)
+# Build: docker build -t qa-multiagent-frontend:latest -f frontend/Dockerfile .
 # Run: docker run -p 3000:3000 qa-multiagent-frontend:latest
 
-FROM nginx:alpine
+FROM node:20-alpine AS base
 
-# Set working directory
-WORKDIR /usr/share/nginx/html
+# ── deps stage: install dependencies ─────────────────────────────────────────
+FROM base AS deps
+WORKDIR /app
 
-# Copy static files to nginx
-COPY src/static/ ./
-COPY src/js/ ./js/
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci
 
-# Copy nginx configuration
-RUN echo 'server { \
-    listen 3000; \
-    server_name localhost; \
-    \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    \
-    location /api/ { \
-        proxy_pass http://backend:8000; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# ── builder stage: build the Next.js app ─────────────────────────────────────
+FROM base AS builder
+WORKDIR /app
 
-# Expose port
+COPY --from=deps /app/node_modules ./node_modules
+COPY frontend/ .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+RUN npm run build
+
+# ── runner stage: minimal production image ────────────────────────────────────
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
 EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=10s \
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=30s \
     CMD wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.js"]
