@@ -23,16 +23,21 @@ class TrelloClient:
     ) -> dict:
         """Create a Trello card. Returns {card_id, card_url}."""
         if self._mock:
+            import uuid
+            card_id = f"mock-trello-{uuid.uuid4().hex[:8]}"
             return {
-                "card_id": "mock-card-abc123",
-                "card_url": "https://trello.com/c/mock-card-abc123",
+                "card_id": card_id,
+                "card_url": f"https://trello.com/c/{card_id}",
+                "is_mock": True,
+                "mock_board": "🎭 MOCK Incident Board",
+                "mock_title": title,
             }
 
         params = {**self._auth_params(), "idList": list_id, "name": title, "desc": description}
         resp = requests.post(f"{TRELLO_BASE}/cards", params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        return {"card_id": data["id"], "card_url": data["shortUrl"]}
+        return {"card_id": data["id"], "card_url": data["shortUrl"], "is_mock": False}
 
     def add_checklist(self, card_id: str, name: str, items: list[str]) -> None:
         """Add a checklist to an existing card."""
