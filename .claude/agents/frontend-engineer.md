@@ -1,75 +1,75 @@
 # Frontend Engineer
 
 ## Mission
-Implementar la experiencia mínima del MVP alineada con la spec y los contratos.
+Implement the minimum MVP experience aligned with the spec and contracts.
 
 ## Focus
-- flujos UI
-- estados
-- accesibilidad
-- consumo de API
-- pruebas de flujo
+- UI flows
+- states
+- accessibility
+- API consumption
+- flow tests
 
 ## Rules
-- representar loading/error/empty/success
-- no asumir respuestas ambiguas del backend
-- respetar criterios de aceptación
+- represent loading/error/empty/success
+- do not assume ambiguous backend responses
+- respect acceptance criteria
 
 ---
 
 ## Inputs
 - spec: `docs/specs/mvp/spec.md` (FR1-FR3, AC1-AC8)
-- contratos API: `docs/architecture/api-contracts.md`
-- criterios de aceptación: AC1-AC8 en la spec
+- API contracts: `docs/architecture/api-contracts.md`
+- acceptance criteria: AC1-AC8 in the spec
 
 ## SRE Domain Context
-La UI es un **formulario de reporte de incidentes**. Stack: **Next.js 14 + React 18 + TypeScript + Tailwind CSS**, ejecutado desde `frontend/app/`
+The UI is an **incident report form**. Stack: **Next.js 14 + React 18 + TypeScript + Tailwind CSS**, served from `frontend/app/`
 
-**Componentes principales:**
-- `app/page.tsx` → Estado orchestration + router
-- `app/components/IncidentForm.tsx` → Form component (React + hooks)
-- `app/components/StatusTracker.tsx` → Status polling component
-- `lib/api.ts` → Axios client centralizado
+**Main components:**
+- `app/page.tsx` → state orchestration + router
+- `app/components/IncidentForm.tsx` → form component (React + hooks)
+- `app/components/StatusTracker.tsx` → status polling component
+- `lib/api.ts` → centralized Axios client
 
-**Campos requeridos del formulario:**
-| Campo | React Input | Validación cliente | Requerido |
+**Required form fields:**
+| Field | React Input | Client validation | Required |
 |---|---|---|---|
-| `title` | `<input type="text">` | max 200 chars | Sí |
-| `description` | `<textarea>` | max 2000 chars con contador | Sí |
-| `reporter_email` | `<input type="email">` | formato email válido (regex) | Sí |
+| `title` | `<input type="text">` | max 200 chars | Yes |
+| `description` | `<textarea>` | max 2000 chars with counter | Yes |
+| `reporter_email` | `<input type="email">` | valid email format (regex) | Yes |
 | `attachment` | `<input type="file">` | PNG/JPEG/TXT/JSON, max 10MB | No |
 
-**Estados de UI requeridos (todo obligatorio):**
-| Estado | Trigger | Mensaje +UI |
+**Required UI states (all mandatory):**
+| State | Trigger | Message + UI |
 |---|---|---|
-| `idle` | Estado inicial | Formulario vacío + botón enabled |
-| `loading` | POST enviado | Spinner + "Submitting..." + botón disabled |
-| `success` | HTTP 201 con trace_id | Trace_id visible + timeline de progreso |
-| `error-injection` | HTTP 400 injection_detected | "Your report contains content..." (rojo) |
-| `error-validation` | HTTP 400 validation_error | Mensaje específico del error (rojo) |
-| `error-server` | HTTP 500 | "Something went wrong..." (rojo) |
+| `idle` | initial state | empty form + button enabled |
+| `loading` | POST submitted | spinner + "Submitting..." + button disabled |
+| `success` | HTTP 201 with trace_id | trace_id visible + progress timeline |
+| `error-injection` | HTTP 400 injection_detected | "Your report contains content..." (red) |
+| `error-validation` | HTTP 400 validation_error | field-specific error message (red) |
+| `error-server` | HTTP 500 | "Something went wrong..." (red) |
 
-**Multimodal UX con React:**
-- State para file preview: if (file instanceof File) render thumbnail o icono
-- Character counter: realtime update en description field
-- File validation: antes del POST, reject >10MB
-- MIME validation: accept solo PNG, JPEG, TXT, JSON
+**Multimodal UX with React:**
+- file preview state: if (file instanceof File) render thumbnail or icon
+- character counter: realtime update in description field
+- file validation: before POST, reject >10MB
+- MIME validation: accept only PNG, JPEG, TXT, JSON
 
-## Estructura de archivos (Next.js 14)
+## File structure (Next.js 14)
 ```
 frontend/
 ├── app/
-│   ├── page.tsx                # Home page principal
+│   ├── page.tsx                # main home page
 │   ├── globals.css             # Tailwind + custom utilities
-│   ├── layout.tsx              # Root layout
+│   ├── layout.tsx              # root layout
 │   └── components/             # React components
 ├── lib/
 │   └── api.ts                  # Axios client
 └── public/                     # Static assets
 ```
 
-## Llamada a la API
-El formulario hace un `fetch()` a `POST /api/incidents` con `FormData`:
+## API call
+The form does a `fetch()` to `POST /api/incidents` with `FormData`:
 ```javascript
 const formData = new FormData();
 formData.append('title', title);

@@ -9,55 +9,55 @@
 
 ## 1. Summary
 
-Sistema multi-agente de ingesta y triage automático de incidentes para una aplicación e-commerce (Medusa.js). Convierte un reporte multimodal (texto + imagen de error o archivo de log) en una Card de Trello enriquecida con análisis del codebase, notifica al equipo técnico vía Slack y al reporter vía email, y cierra el ciclo cuando el incidente se resuelve.
+Multi-agent system for automatic incident intake and triage for an e-commerce application (Medusa.js). Converts a multimodal report (text + error image or log file) into an enriched Trello card with codebase analysis, notifies the technical team via Slack and the reporter via email, and closes the loop when the incident is resolved.
 
-Construido para el **AgentX Hackathon de SoftServe** — [docs/hackathon/context.md](../hackathon/context.md)
+Built for the **AgentX Hackathon by SoftServe** — [docs/hackathon/context.md](../hackathon/context.md)
 
 ---
 
 ## 2. Problem Statement
 
-Ver [docs/idea/problem-statement.md](../idea/problem-statement.md) para el detalle completo.
+See [docs/idea/problem-statement.md](../idea/problem-statement.md) for full details.
 
-**Resumen ejecutivo:** El triage manual de incidentes en e-commerce tarda 15-45 minutos por incidente. El agente lo reduce a ~2 minutos, genera tickets con contexto técnico real del codebase, y cierra el ciclo de notificación automáticamente.
+**Executive summary:** Manual incident triage in e-commerce takes 15-45 minutes per incident. The agent reduces this to ~2 minutes, generates tickets with real technical context from the codebase, and closes the notification loop automatically.
 
 ---
 
 ## 3. Target Users
 
-| Usuario | Contexto de uso | Pain point principal |
+| User | Use context | Main pain point |
 |---|---|---|
-| **SRE on-call engineer** (primary) | Recibe alertas de producción, muchas veces a cualquier hora | Tiempo de triage manual + carga cognitiva para reconstruir contexto |
-| **Developer interno** | Descubre un bug en la app e-commerce durante desarrollo o QA | No tiene un canal claro para reportar sin crear ruido |
-| **Automated monitor** | Webhook de Datadog/PagerDuty que detecta anomalía | Necesita ingresar el reporte de forma estructurada al pipeline |
-| **Reporter (usuario final)** | Encuentra un error en producción | No recibe confirmación de que su reporte fue recibido ni cuándo se resolverá |
+| **SRE on-call engineer** (primary) | Receives production alerts, often at any hour | Manual triage time + cognitive load to rebuild context |
+| **Internal developer** | Discovers a bug in the e-commerce app during development or QA | Lacks a clear channel to report without creating noise |
+| **Automated monitor** | Datadog/PagerDuty webhook detects an anomaly | Needs to submit the report structured into the pipeline |
+| **Reporter (end user)** | Finds an error in production | Does not receive confirmation their report was received or when it will be resolved |
 
 ---
 
 ## 4. Goals
 
-| ID | Goal | Criterio de éxito |
+| ID | Goal | Success criterion |
 |---|---|---|
-| G1 | Aceptar reporte multimodal via UI web | Formulario acepta texto + imagen PNG/JPG o archivo .log/.txt |
-| G2 | Triage automático con LLM multimodal | TriageAgent produce: severity (P1-P4), módulo afectado, resumen técnico, archivos sugeridos |
-| G3 | Correlación con codebase Medusa.js | El análisis cita archivos reales del repo (ej. `packages/medusa/src/services/cart.ts`) |
-| G4 | Crear Card en Trello con contexto enriquecido | Card existe en el board con todos los campos requeridos (FR5) |
-| G5 | Notificar equipo técnico vía Slack | Mensaje en #incidents dentro de 30 segundos |
-| G6 | Confirmar al reporter vía email | Email con número de Card y tiempo estimado dentro de 60 segundos |
-| G7 | Cerrar el ciclo al resolver | Email al reporter cuando la Card se mueve a "Done" en Trello |
-| G8 | Observability end-to-end | Logs JSON con trace_id consistente en ingest → triage → ticket → notify → resolved |
+| G1 | Accept multimodal report via web UI | Form accepts text + PNG/JPG image or .log/.txt file |
+| G2 | Automatic triage with multimodal LLM | TriageAgent outputs: severity (P1-P4), affected module, technical summary, suggested files |
+| G3 | Correlation with Medusa.js codebase | Analysis cites real repo files (e.g. `packages/medusa/src/services/cart.ts`) |
+| G4 | Create Trello card with enriched context | Card exists on the board with all required fields (FR5) |
+| G5 | Notify technical team via Slack | Message appears in #incidents within 30 seconds |
+| G6 | Confirm reporter by email | Email includes card number and ETA within 60 seconds |
+| G7 | Close the loop on resolution | Email reporter when the card moves to "Done" in Trello |
+| G8 | End-to-end observability | JSON logs with consistent trace_id across ingest → triage → ticket → notify → resolved |
 
 ---
 
 ## 5. Non-Goals
 
-- Ejecutar comandos en producción, rollbacks automáticos o remediación
-- Análisis de performance (APM) o métricas de infraestructura
-- Integración con Datadog, PagerDuty u otras herramientas de monitoring en el MVP
-- UI sofisticada — un formulario HTML funcional es suficiente
-- Video como modalidad de input en el MVP (texto + imagen + log es suficiente)
-- Soporte multi-tenant (un solo equipo/board en el MVP)
-- Deduplicación de incidentes (marcado como opcional post-MVP)
+- Execute production commands, automatic rollback, or remediation
+- Performance analysis (APM) or infrastructure metrics
+- Integration with Datadog, PagerDuty, or other monitoring tools in the MVP
+- Sophisticated UI — a functional HTML form is sufficient
+- Video as an input modality in the MVP (text + image + log is sufficient)
+- Multi-tenant support (single team/board in the MVP)
+- Incident deduplication (marked as post-MVP optional)
 
 ---
 

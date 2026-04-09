@@ -1,7 +1,55 @@
 # Frontend Instructions
 
-- Implementa flujos alineados con criterios de aceptación.
-- Prioriza claridad de estados: loading, empty, error, success.
-- Mantén accesibilidad y consistencia visual.
-- No acoples la UI a respuestas implícitas o inestables del backend.
-- Agrega pruebas o validación manual documentada para flujos críticos.
+## Mission
+Implement the minimum MVP experience aligned with the spec and contracts.
+
+## Focus
+- UI flows
+- states
+- accessibility
+- API consumption
+- flow tests
+
+## Rules
+- represent loading/error/empty/success
+- do not assume ambiguous backend responses
+- respect acceptance criteria
+- Implement flows aligned with acceptance criteria.
+- Prioritize clear states: loading, empty, error, success.
+- Maintain accessibility and visual consistency.
+- Do not couple the UI to implicit or unstable backend responses.
+- Add tests or documented manual validation for critical flows.
+
+---
+
+## Inputs
+- spec: `docs/specs/mvp/spec.md` (FR1-FR3, AC1-AC8)
+- API contracts: `docs/architecture/api-contracts.md`
+- acceptance criteria: AC1-AC8 in the spec
+
+## SRE Domain Context
+The UI is an **incident report form**. Stack: **Next.js 14 + React 18 + TypeScript + Tailwind CSS**, served from `frontend/app/`
+
+**Main components:**
+- `app/page.tsx` → state orchestration + router
+- `app/components/IncidentForm.tsx` → form component (React + hooks)
+- `app/components/StatusTracker.tsx` → status polling component
+- `lib/api.ts` → centralized Axios client
+
+**Required form fields:**
+| Field | React Input | Client validation | Required |
+|---|---|---|---|
+| `title` | `<input type="text">` | max 200 chars | Yes |
+| `description` | `<textarea>` | max 2000 chars with counter | Yes |
+| `reporter_email` | `<input type="email">` | valid email format (regex) | Yes |
+| `attachment` | `<input type="file">` | PNG/JPEG/TXT/JSON, max 10MB | No |
+
+**Required UI states (all mandatory):**
+| State | Trigger | Message + UI |
+|---|---|---|
+| `idle` | initial state | empty form + button enabled |
+| `loading` | POST submitted | spinner + "Submitting..." + button disabled |
+| `success` | HTTP 201 with trace_id | trace_id visible + progress timeline |
+| `error-injection` | HTTP 400 injection_detected | "Your report contains content..." (red) |
+| `error-validation` | HTTP 400 validation_error | field-specific error message (red) |
+| `error-server` | HTTP 500 | "Something went wrong..." (red) |
