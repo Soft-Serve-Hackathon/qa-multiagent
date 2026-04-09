@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import MockModeIndicator from './components/MockModeIndicator';
 
 export const metadata: Metadata = {
   title: 'SRE Incident Triage Agent',
@@ -18,6 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
+        <MockModeIndicator />
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
           {children}
         </div>

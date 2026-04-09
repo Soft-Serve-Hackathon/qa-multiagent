@@ -42,6 +42,10 @@ class SlackClient:
 
     def _post(self, text: str) -> bool:
         if self._mock:
+            # Log mock Slack message to observability
+            import logging
+            logger = logging.getLogger("mock-slack")
+            logger.info(f"[MOCK SLACK 🎭] {text[:500]}")
             return True
         try:
             resp = requests.post(
