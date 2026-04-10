@@ -1,12 +1,5 @@
-interface FormInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
-}
+type FormInputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
-export default function FormInput({ label, ...props }: FormInputProps) {
-  return (
-    <input
-      {...props}
-      className="input-field"
-    />
-  );
+export default function FormInput(props: FormInputProps) {
+  return <input {...props} className="input-field" />;
 }
