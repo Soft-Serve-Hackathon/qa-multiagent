@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface StatusTrackerProps {
   incidentId: number;
@@ -13,7 +15,7 @@ interface IncidentStatus {
   incident_id: number;
   trace_id: string;
   title: string;
-  status: 'received' | 'triaging' | 'ticketed' | 'notified' | 'resolved' | 'deduplicated';
+  status: string;
   severity?: string;
   affected_module?: string;
   confidence_score?: number;
@@ -25,257 +27,645 @@ interface IncidentStatus {
   linked_ticket_id?: number;
 }
 
-const SEVERITY_CONFIG: Record<string, { label: string; bg: string; text: string; ring: string }> = {
-  P1: { label: 'P1 CRITICAL', bg: 'bg-red-600',    text: 'text-white',     ring: 'ring-red-200' },
-  P2: { label: 'P2 HIGH',     bg: 'bg-orange-500', text: 'text-white',     ring: 'ring-orange-200' },
-  P3: { label: 'P3 MEDIUM',   bg: 'bg-yellow-400', text: 'text-slate-900', ring: 'ring-yellow-200' },
-  P4: { label: 'P4 LOW',      bg: 'bg-slate-400',  text: 'text-white',     ring: 'ring-slate-200' },
-};
+interface ObsEvent {
+  id: number;
+  stage: string;
+  status: string;
+  duration_ms: number;
+  metadata: Record<string, any>;
+  created_at: string;
+}
 
-const STATUS_STAGES = [
+type StageState = 'pending' | 'active' | 'done' | 'skipped' | 'error';
+
+// ─── Pipeline Definition ─────────────────────────────────────────────────────
+
+const PIPELINE_STAGES = [
   {
-    key: 'received',
-    label: 'Received',
+    key: 'ingest',
+    label: 'Ingest & Validate',
     icon: '📥',
-    activeDescription: 'Incident received — validating input and assigning trace ID...',
+    description: 'Validates input, detects prompt injection, assigns trace ID',
+    color: 'blue',
   },
   {
-    key: 'triaging',
+    key: 'triage',
     label: 'AI Triage',
     icon: '🤖',
-    activeDescription: 'Claude is analyzing your report and searching the Medusa.js codebase...',
+    description: 'Claude analyzes the incident and searches the Medusa.js codebase',
+    color: 'violet',
   },
   {
-    key: 'ticketed',
-    label: 'Ticket Created',
+    key: 'qa_scope',
+    label: 'QA Scope',
+    icon: '🧪',
+    description: 'Evaluates test coverage and proposes regression tests',
+    color: 'cyan',
+  },
+  {
+    key: 'fix_recommendation',
+    label: 'Fix Recommendation',
+    icon: '🔧',
+    description: 'Proposes a concrete fix with risk assessment',
+    color: 'amber',
+  },
+  {
+    key: 'ticket',
+    label: 'Ticket Creation',
     icon: '🎫',
-    activeDescription: 'Creating enriched Trello card with technical context...',
+    description: 'Checks for duplicates and creates enriched Trello card',
+    color: 'green',
   },
   {
-    key: 'notified',
-    label: 'Team Notified',
+    key: 'notify',
+    label: 'Notifications',
     icon: '📢',
-    activeDescription: 'Sending Slack alert to #incidents and confirmation email to reporter...',
+    description: 'Sends Slack alert to team and confirmation email to reporter',
+    color: 'pink',
   },
   {
     key: 'resolved',
     label: 'Resolved',
     icon: '✅',
-    activeDescription: 'Incident resolved. Resolution email sent to reporter.',
+    description: 'Incident resolved — resolution email sent to reporter',
+    color: 'emerald',
   },
 ];
 
-const TERMINAL_STATUSES = ['notified', 'resolved', 'deduplicated'];
+const TERMINAL_INCIDENT_STATUSES = ['notified', 'resolved', 'deduplicated', 'error'];
+
+const SEVERITY_CONFIG: Record<string, { bg: string; text: string; ring: string; label: string }> = {
+  P1: { bg: 'bg-red-600',    text: 'text-white',     ring: 'ring-red-200',    label: 'P1 CRITICAL' },
+  P2: { bg: 'bg-orange-500', text: 'text-white',     ring: 'ring-orange-200', label: 'P2 HIGH' },
+  P3: { bg: 'bg-yellow-400', text: 'text-slate-900', ring: 'ring-yellow-200', label: 'P3 MEDIUM' },
+  P4: { bg: 'bg-slate-400',  text: 'text-white',     ring: 'ring-slate-200',  label: 'P4 LOW' },
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function getStageState(
+  stageKey: string,
+  events: ObsEvent[],
+  isComplete: boolean,
+): StageState {
+  const event = events.find(e => e.stage === stageKey);
+
+  if (event) {
+    if (['success', 'deduplicated'].includes(event.status)) return 'done';
+    if (event.status === 'skipped') return 'skipped';
+    if (event.status === 'error') return 'error';
+  }
+
+  if (isComplete) return 'pending';
+
+  // Active = first stage with no event, after all preceding stages are done/skipped
+  const stageIdx = PIPELINE_STAGES.findIndex(s => s.key === stageKey);
+  const allPriorSettled = PIPELINE_STAGES.slice(0, stageIdx).every(s =>
+    events.some(e => e.stage === s.key)
+  );
+
+  return allPriorSettled ? 'active' : 'pending';
+}
+
+function stageClasses(state: StageState, color: string) {
+  const base = 'relative flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-base font-bold transition-all duration-300';
+  switch (state) {
+    case 'done':    return `${base} bg-green-500 text-white shadow-sm`;
+    case 'skipped': return `${base} bg-amber-400 text-white`;
+    case 'error':   return `${base} bg-red-500 text-white`;
+    case 'active':  return `${base} bg-blue-600 text-white ring-4 ring-blue-200 animate-pulse`;
+    default:        return `${base} bg-slate-200 text-slate-400`;
+  }
+}
+
+function connectorClass(state: StageState) {
+  switch (state) {
+    case 'done':    return 'bg-green-400';
+    case 'skipped': return 'bg-amber-300';
+    case 'error':   return 'bg-red-400';
+    case 'active':  return 'bg-blue-300';
+    default:        return 'bg-slate-200';
+  }
+}
+
+// ─── Stage Detail Renderers ───────────────────────────────────────────────────
+
+function IngestDetail({ meta }: { meta: Record<string, any> }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+      <MetaRow label="Attachment" value={meta.attachment_type || 'none'} />
+      <MetaRow label="Injection check" value={meta.injection_check === 'passed' ? '✅ passed' : '⚠️ checked'} />
+    </div>
+  );
+}
+
+function TriageDetail({ meta, incident }: { meta: Record<string, any>; incident: IncidentStatus | null }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        <MetaRow label="Model" value={meta.model || 'claude-sonnet-4-6'} />
+        <MetaRow label="Severity" value={meta.severity_detected} />
+        <MetaRow label="Module" value={meta.module_detected} />
+        <MetaRow label="Confidence" value={meta.confidence != null ? `${Math.round(meta.confidence * 100)}%` : undefined} />
+        <MetaRow label="Files found" value={meta.files_found} />
+        <MetaRow label="Reasoning steps" value={meta.reasoning_steps} />
+      </div>
+      {incident?.technical_summary && (
+        <div className="bg-slate-50 rounded p-2 border border-slate-200">
+          <p className="text-xs font-semibold text-slate-600 mb-1">Technical Summary</p>
+          <p className="text-xs text-slate-700 leading-relaxed">{incident.technical_summary}</p>
+        </div>
+      )}
+      {incident?.suggested_files && incident.suggested_files.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-600 mb-1">Suggested files</p>
+          <div className="space-y-0.5">
+            {incident.suggested_files.map(f => (
+              <div key={f} className="font-mono text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded truncate">{f}</div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QaDetail({ meta }: { meta: Record<string, any> }) {
+  if (meta.error) return <ErrorDetail message={meta.error} />;
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+      <MetaRow label="Reproduced" value={meta.reproduced ? '✅ yes' : '❌ no'} />
+      <MetaRow label="Failing tests" value={meta.failing_tests_count} />
+      <MetaRow label="New tests proposed" value={meta.new_tests_count} />
+      <MetaRow label="Coverage files" value={meta.coverage_files_found} />
+      <MetaRow label="Module" value={meta.module} />
+    </div>
+  );
+}
+
+function FixDetail({ meta }: { meta: Record<string, any> }) {
+  if (meta.error) return <ErrorDetail message={meta.error} />;
+  const riskColors: Record<string, string> = {
+    low: 'text-green-700 bg-green-50',
+    medium: 'text-amber-700 bg-amber-50',
+    high: 'text-red-700 bg-red-50',
+  };
+  const riskClass = riskColors[meta.risk_level] || 'text-slate-700 bg-slate-50';
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+      <div className="col-span-2 flex items-center gap-2">
+        <span className="text-slate-500">Risk level:</span>
+        <span className={`px-2 py-0.5 rounded font-bold uppercase text-xs ${riskClass}`}>{meta.risk_level || '—'}</span>
+      </div>
+      <MetaRow label="Proposed files" value={meta.proposed_files_count} />
+      <MetaRow label="Module" value={meta.module} />
+    </div>
+  );
+}
+
+function TicketDetail({ meta }: { meta: Record<string, any> }) {
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        {meta.linked_card_id || meta.card_id ? (
+          <MetaRow label="Card ID" value={meta.linked_card_id || meta.card_id} />
+        ) : null}
+        {meta.similarity_score != null && (
+          <MetaRow label="Similarity" value={`${Math.round(meta.similarity_score * 100)}%`} />
+        )}
+        <MetaRow label="QA included" value={meta.qa_included ? '✅' : '—'} />
+        <MetaRow label="Fix included" value={meta.fix_included ? '✅' : '—'} />
+        <MetaRow label="Mode" value={meta.mock ? 'mock' : 'real'} />
+      </div>
+      {meta.card_url && (
+        <a
+          href={meta.card_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline font-medium"
+        >
+          Open Trello card ↗
+        </a>
+      )}
+    </div>
+  );
+}
+
+function NotifyDetail({ meta }: { meta: Record<string, any> }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+      <MetaRow label="Slack" value={meta.slack_ok ? '✅ sent' : '❌ failed'} />
+      <MetaRow label="Email" value={meta.email_ok ? '✅ sent' : '❌ failed'} />
+      <MetaRow label="Mode" value={meta.mock ? 'mock' : 'real'} />
+    </div>
+  );
+}
+
+function ResolvedDetail({ meta }: { meta: Record<string, any> }) {
+  return (
+    <div className="text-xs">
+      <MetaRow label="Resolved at" value={meta.resolved_at ? new Date(meta.resolved_at).toLocaleString() : undefined} />
+    </div>
+  );
+}
+
+function ErrorDetail({ message }: { message: string }) {
+  return (
+    <p className="text-xs text-red-600 bg-red-50 rounded p-2 font-mono break-all">{message}</p>
+  );
+}
+
+function MetaRow({ label, value }: { label: string; value: any }) {
+  if (value == null || value === '') return null;
+  return (
+    <>
+      <span className="text-slate-400 truncate">{label}</span>
+      <span className="text-slate-800 font-medium truncate">{String(value)}</span>
+    </>
+  );
+}
+
+function StageDetailContent({
+  stageKey,
+  meta,
+  incident,
+}: {
+  stageKey: string;
+  meta: Record<string, any>;
+  incident: IncidentStatus | null;
+}) {
+  switch (stageKey) {
+    case 'ingest':            return <IngestDetail meta={meta} />;
+    case 'triage':            return <TriageDetail meta={meta} incident={incident} />;
+    case 'qa_scope':          return <QaDetail meta={meta} />;
+    case 'fix_recommendation':return <FixDetail meta={meta} />;
+    case 'ticket':            return <TicketDetail meta={meta} />;
+    case 'notify':            return <NotifyDetail meta={meta} />;
+    case 'resolved':          return <ResolvedDetail meta={meta} />;
+    default:                  return null;
+  }
+}
+
+// ─── Progress Bar ─────────────────────────────────────────────────────────────
+
+function PipelineProgress({ events, isComplete }: { events: ObsEvent[]; isComplete: boolean }) {
+  const total = PIPELINE_STAGES.length - 1; // exclude 'resolved' from normal progress
+  const done = events.filter(e =>
+    ['success', 'deduplicated', 'skipped'].includes(e.status) &&
+    e.stage !== 'resolved'
+  ).length;
+  const pct = isComplete ? 100 : Math.round((done / total) * 100);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs text-slate-500">
+        <span>{isComplete ? 'Pipeline complete' : `${done} / ${total} stages`}</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-blue-500 to-green-500 rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Stage Card ───────────────────────────────────────────────────────────────
+
+function StageCard({
+  stage,
+  state,
+  event,
+  incident,
+  isLast,
+  defaultOpen,
+}: {
+  stage: typeof PIPELINE_STAGES[0];
+  state: StageState;
+  event: ObsEvent | undefined;
+  incident: IncidentStatus | null;
+  isLast: boolean;
+  defaultOpen: boolean;
+}) {
+  const [expanded, setExpanded] = useState(defaultOpen);
+
+  const stateLabel: Record<StageState, string> = {
+    pending: 'Waiting',
+    active: 'Running…',
+    done: event?.status === 'deduplicated' ? 'Deduplicated' : 'Done',
+    skipped: 'Skipped',
+    error: 'Error',
+  };
+
+  const stateTextColor: Record<StageState, string> = {
+    pending: 'text-slate-400',
+    active: 'text-blue-600',
+    done: 'text-green-600',
+    skipped: 'text-amber-600',
+    error: 'text-red-600',
+  };
+
+  const hasDetail = state === 'done' || state === 'skipped' || state === 'error';
+
+  return (
+    <div className="flex items-start gap-3">
+      {/* Left: circle + connector */}
+      <div className="flex flex-col items-center">
+        <div className={stageClasses(state, stage.color)}>
+          {state === 'active' ? (
+            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          ) : state === 'done' ? (
+            <span className="text-sm">✓</span>
+          ) : state === 'skipped' ? (
+            <span className="text-sm">⤼</span>
+          ) : state === 'error' ? (
+            <span className="text-sm">✕</span>
+          ) : (
+            <span className="text-base">{stage.icon}</span>
+          )}
+        </div>
+        {!isLast && (
+          <div className={`w-0.5 h-8 mt-1 rounded-full transition-colors duration-500 ${connectorClass(state)}`} />
+        )}
+      </div>
+
+      {/* Right: content */}
+      <div className="flex-1 pb-6 min-w-0">
+        <div
+          className={`flex items-start justify-between gap-2 ${hasDetail ? 'cursor-pointer' : ''}`}
+          onClick={() => hasDetail && setExpanded(v => !v)}
+        >
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-sm font-semibold ${state === 'pending' ? 'text-slate-400' : 'text-slate-900'}`}>
+                {stage.label}
+              </span>
+              <span className={`text-xs font-medium ${stateTextColor[state]}`}>
+                {stateLabel[state]}
+              </span>
+              {event?.duration_ms != null && (
+                <span className="text-xs text-slate-400 tabular-nums">{fmtDuration(event.duration_ms)}</span>
+              )}
+            </div>
+            {state === 'active' && (
+              <p className="text-xs text-slate-500 mt-0.5">{stage.description}</p>
+            )}
+            {state === 'pending' && (
+              <p className="text-xs text-slate-400 mt-0.5">{stage.description}</p>
+            )}
+          </div>
+          {hasDetail && (
+            <span className={`text-slate-400 text-xs flex-shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}>
+              ▾
+            </span>
+          )}
+        </div>
+
+        {/* Inline key metrics for done stages */}
+        {state === 'done' && event && !expanded && (
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+            <StageInlineSummary stageKey={stage.key} meta={event.metadata} incident={incident} />
+          </div>
+        )}
+
+        {/* Expanded detail */}
+        {hasDetail && expanded && event && (
+          <div className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <StageDetailContent stageKey={stage.key} meta={event.metadata} incident={incident} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Inline summary (collapsed view) ─────────────────────────────────────────
+
+function StageInlineSummary({
+  stageKey,
+  meta,
+  incident,
+}: {
+  stageKey: string;
+  meta: Record<string, any>;
+  incident: IncidentStatus | null;
+}) {
+  const chip = (text: string, color = 'text-slate-500') => (
+    <span key={text} className={`text-xs ${color}`}>{text}</span>
+  );
+
+  switch (stageKey) {
+    case 'ingest':
+      return <>{chip(`attachment: ${meta.attachment_type || 'none'}`)}</>;
+    case 'triage':
+      return <>
+        {meta.severity_detected && chip(meta.severity_detected, 'text-orange-600 font-semibold')}
+        {meta.module_detected && chip(`module: ${meta.module_detected}`)}
+        {meta.confidence != null && chip(`${Math.round(meta.confidence * 100)}% confidence`)}
+        {meta.files_found != null && chip(`${meta.files_found} files`)}
+      </>;
+    case 'qa_scope':
+      return <>
+        {chip(meta.reproduced ? '✅ reproduced' : '❌ not reproduced', meta.reproduced ? 'text-green-600' : 'text-slate-500')}
+        {meta.new_tests_count > 0 && chip(`${meta.new_tests_count} test(s) proposed`, 'text-cyan-600')}
+      </>;
+    case 'fix_recommendation':
+      return <>
+        {meta.risk_level && chip(`risk: ${meta.risk_level}`,
+          meta.risk_level === 'high' ? 'text-red-600 font-semibold'
+          : meta.risk_level === 'medium' ? 'text-amber-600'
+          : 'text-green-600'
+        )}
+        {meta.proposed_files_count > 0 && chip(`${meta.proposed_files_count} file(s)`)}
+      </>;
+    case 'ticket':
+      return <>
+        {meta.linked_card_id ? chip(`linked to ${meta.linked_card_id}`, 'text-amber-600') : chip('card created', 'text-green-600')}
+        {meta.similarity_score != null && chip(`${Math.round(meta.similarity_score * 100)}% match`)}
+      </>;
+    case 'notify':
+      return <>
+        {chip(`slack: ${meta.slack_ok ? '✅' : '❌'}`, meta.slack_ok ? 'text-green-600' : 'text-red-500')}
+        {chip(`email: ${meta.email_ok ? '✅' : '❌'}`, meta.email_ok ? 'text-green-600' : 'text-red-500')}
+      </>;
+    default:
+      return null;
+  }
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function StatusTracker({ incidentId, traceId, onReset }: StatusTrackerProps) {
-  const [status, setStatus] = useState<IncidentStatus | null>(null);
-  const [isPolling, setIsPolling] = useState(true);
+  const [incident, setIncident] = useState<IncidentStatus | null>(null);
+  const [events, setEvents] = useState<ObsEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    let pollInterval: NodeJS.Timeout;
+  const isComplete = incident
+    ? TERMINAL_INCIDENT_STATUSES.includes(incident.status)
+    : false;
 
-    const poll = async () => {
-      try {
-        const response = await axios.get(`/api/incidents/${incidentId}`, { timeout: 5000 });
-        setStatus(response.data);
-        setError(null);
-        if (TERMINAL_STATUSES.includes(response.data.status)) {
-          setIsPolling(false);
-        }
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to fetch status');
-      }
-    };
-
-    poll();
-    if (isPolling) pollInterval = setInterval(poll, 5000);
-
-    return () => { if (pollInterval) clearInterval(pollInterval); };
-  }, [incidentId, isPolling]);
-
-  const isDeduplicated = status?.status === 'deduplicated' || status?.deduplicated;
-
-  // For deduplicated, show as "ticketed" stage (already has a ticket)
-  const effectiveStatus = isDeduplicated ? 'ticketed' : status?.status;
-  const currentStageIndex = effectiveStatus
-    ? STATUS_STAGES.findIndex(s => s.key === effectiveStatus)
-    : -1;
-
-  const handleCopyTraceId = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(traceId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard not available
+      const [incRes, evRes] = await Promise.all([
+        axios.get(`/api/incidents/${incidentId}`, { timeout: 5000 }),
+        axios.get(`/api/observability/events?trace_id=${traceId}&limit=20`, { timeout: 5000 }),
+      ]);
+      setIncident(incRes.data);
+      setEvents(evRes.data.events ?? []);
+      setError(null);
+    } catch (err: any) {
+      setError('Failed to fetch status — retrying…');
     }
+  }, [incidentId, traceId]);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(() => {
+      if (!isComplete) fetchData();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [fetchData, isComplete]);
+
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(traceId); } catch {}
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const severityConfig = status?.severity ? SEVERITY_CONFIG[status.severity] : null;
-  const trelloUrl = status?.trello_card_url
-    || (status?.trello_card_id ? `https://trello.com/c/${status.trello_card_id}` : null);
+  const severityConfig = incident?.severity ? SEVERITY_CONFIG[incident.severity] : null;
+  const isDeduplicated = incident?.status === 'deduplicated' || incident?.deduplicated;
+  const trelloUrl = incident?.trello_card_url
+    || (incident?.trello_card_id ? `https://trello.com/c/${incident.trello_card_id}` : null);
+
+  // Which stage to auto-expand: last completed or current active
+  const lastDoneKey = [...PIPELINE_STAGES].reverse().find(s =>
+    events.some(e => e.stage === s.key && ['success', 'deduplicated', 'skipped'].includes(e.status))
+  )?.key;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
 
-      {/* Trace ID with Copy button */}
-      <div className="bg-slate-100 rounded-lg p-4">
+      {/* ── Trace ID ───────────────────────────────────────────────────────── */}
+      <div className="bg-slate-100 rounded-lg p-3">
         <div className="flex items-center justify-between mb-1">
-          <p className="text-sm text-slate-600">Trace ID</p>
+          <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Trace ID</p>
           <button
-            onClick={handleCopyTraceId}
-            className="text-xs text-slate-500 hover:text-slate-800 transition-colors flex items-center gap-1 px-2 py-0.5 rounded border border-slate-300 hover:border-slate-400 bg-white"
+            onClick={handleCopy}
+            className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 px-2 py-0.5 rounded border border-slate-300 hover:border-slate-400 bg-white transition-colors"
           >
             {copied ? '✓ Copied' : '⧉ Copy'}
           </button>
         </div>
-        <code className="font-mono text-sm text-slate-900 break-all">{traceId}</code>
-        <p className="text-xs text-slate-500 mt-2">Use this ID to track your incident across all systems</p>
+        <code className="font-mono text-xs text-slate-800 break-all">{traceId}</code>
       </div>
 
-      {/* Deduplicated banner */}
+      {/* ── Severity badge ────────────────────────────────────────────────── */}
+      {severityConfig && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ring-4 ${severityConfig.bg} ${severityConfig.text} ${severityConfig.ring}`}>
+            {severityConfig.label}
+          </span>
+          {incident?.affected_module && (
+            <span className="text-sm text-slate-600">
+              Module: <span className="font-semibold text-slate-900">{incident.affected_module}</span>
+            </span>
+          )}
+          {incident?.confidence_score != null && (
+            <span className="text-xs text-slate-400">{Math.round(incident.confidence_score * 100)}% confidence</span>
+          )}
+        </div>
+      )}
+
+      {/* ── Deduplicated banner ───────────────────────────────────────────── */}
       {isDeduplicated && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <p className="text-sm font-semibold text-amber-900">Duplicate Detected</p>
-          <p className="text-xs text-amber-700 mt-1">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          <p className="text-sm font-semibold text-amber-900">⚠️ Duplicate Detected</p>
+          <p className="text-xs text-amber-700 mt-0.5">
             This incident matches an existing open ticket.
-            {status?.linked_ticket_id && ` Linked to ticket #${status.linked_ticket_id}.`}
+            {incident?.linked_ticket_id ? ` Linked to ticket #${incident.linked_ticket_id}.` : ''}
           </p>
         </div>
       )}
 
-      {/* Severity badge — visible as soon as triage completes */}
-      {severityConfig && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <span
-            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold ring-4 ${severityConfig.bg} ${severityConfig.text} ${severityConfig.ring}`}
-          >
-            {severityConfig.label}
-          </span>
-          {status?.affected_module && (
-            <span className="text-sm text-slate-600">
-              Module: <span className="font-semibold text-slate-900">{status.affected_module}</span>
-            </span>
-          )}
-          {status?.confidence_score !== undefined && (
-            <span className="text-xs text-slate-400">
-              Confidence: {Math.round(status.confidence_score * 100)}%
-            </span>
-          )}
-        </div>
-      )}
+      {/* ── Progress bar ──────────────────────────────────────────────────── */}
+      <PipelineProgress events={events} isComplete={isComplete} />
 
-      {/* Status Timeline */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Processing Status</h2>
-        <div className="relative">
-          {STATUS_STAGES.map((stage, index) => {
-            const isCompleted = index <= currentStageIndex;
-            const isCurrent = index === currentStageIndex;
+      {/* ── Pipeline stages ───────────────────────────────────────────────── */}
+      <div>
+        <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">
+          Pipeline — live view
+        </h2>
+        <div>
+          {PIPELINE_STAGES.map((stage, idx) => {
+            const state = getStageState(stage.key, events, isComplete);
+            const event = events.find(e => e.stage === stage.key);
+            const isLast = idx === PIPELINE_STAGES.length - 1;
+            const defaultOpen = stage.key === lastDoneKey && state === 'done';
 
             return (
-              <div key={stage.key} className="flex items-start mb-6 last:mb-0">
-                {index < STATUS_STAGES.length - 1 && (
-                  <div className={`absolute left-5 top-12 w-1 h-8 ${isCompleted ? 'bg-green-500' : 'bg-slate-300'}`} />
-                )}
-                <div
-                  className={`relative flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${
-                    isCurrent
-                      ? 'bg-yellow-400 text-slate-900 ring-4 ring-yellow-200'
-                      : isCompleted
-                      ? 'bg-green-500 text-white'
-                      : 'bg-slate-300 text-slate-600'
-                  }`}
-                >
-                  {isCompleted && !isCurrent ? '✓' : stage.icon}
-                </div>
-                <div className="ml-4 flex-1 pt-1">
-                  <p className={`font-semibold ${isCurrent ? 'text-slate-900' : 'text-slate-700'}`}>
-                    {stage.label}
-                  </p>
-                  {isCurrent && (
-                    <p className="text-sm text-slate-500 mt-0.5">
-                      {isPolling ? stage.activeDescription : 'Complete'}
-                    </p>
-                  )}
-                </div>
-              </div>
+              <StageCard
+                key={stage.key}
+                stage={stage}
+                state={state}
+                event={event}
+                incident={incident}
+                isLast={isLast}
+                defaultOpen={defaultOpen}
+              />
             );
           })}
         </div>
       </div>
 
-      {/* AI Triage Analysis — expandable */}
-      {status?.technical_summary && (
-        <details className="group bg-blue-50 border border-blue-200 rounded-lg">
-          <summary className="px-4 py-3 cursor-pointer text-sm font-semibold text-blue-900 flex items-center justify-between list-none select-none">
-            <span>🤖 AI Triage Analysis</span>
-            <span className="text-blue-400 group-open:rotate-180 transition-transform">&#9660;</span>
-          </summary>
-          <div className="px-4 pb-4 space-y-3 border-t border-blue-200 pt-3">
-            <p className="text-sm text-blue-800">{status.technical_summary}</p>
-            {status.suggested_files && status.suggested_files.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-blue-700 mb-1">Suggested files to investigate:</p>
-                <ul className="space-y-1">
-                  {status.suggested_files.map(f => (
-                    <li key={f}>
-                      <code className="text-xs bg-blue-100 text-blue-900 px-2 py-0.5 rounded font-mono">{f}</code>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </details>
-      )}
-
-      {/* Trello card link */}
-      {(status?.trello_card_id || trelloUrl) && (
+      {/* ── Trello CTA ────────────────────────────────────────────────────── */}
+      {trelloUrl && incident?.trello_card_id && incident.trello_card_id !== 'pending' && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-green-900">Trello Card Created</p>
-            {status?.trello_card_id && (
-              <p className="text-xs text-green-700 font-mono mt-0.5">{status.trello_card_id}</p>
-            )}
+            <p className="text-sm font-semibold text-green-900">Trello card created</p>
+            <p className="text-xs text-green-700 font-mono mt-0.5">{incident.trello_card_id}</p>
           </div>
-          {trelloUrl && (
-            <a
-              href={trelloUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition-colors"
-            >
-              Open in Trello &#8599;
-            </a>
-          )}
+          <a
+            href={trelloUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition-colors"
+          >
+            Open in Trello ↗
+          </a>
         </div>
       )}
 
-      {/* Current status pill */}
-      {status && (
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
-          <span className="font-medium">Status:</span>{' '}
-          <span className="font-mono">{status.status.replace(/_/g, ' ').toUpperCase()}</span>
-          {isPolling && !TERMINAL_STATUSES.includes(status.status) && (
-            <span className="ml-2 text-xs text-slate-400">(checking every 5s)</span>
-          )}
-        </div>
-      )}
-
-      {/* Polling error */}
+      {/* ── Error ─────────────────────────────────────────────────────────── */}
       {error && (
-        <div className="alert alert-error">
-          <p className="font-semibold">Status Check Failed</p>
-          <p className="text-sm">{error}</p>
-        </div>
+        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">{error}</p>
       )}
 
-      <button onClick={onReset} className="button-secondary w-full">
-        Submit New Incident
-      </button>
+      {/* ── Footer status + reset ─────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+        <span className="text-xs text-slate-400">
+          {isComplete
+            ? `✓ Status: ${incident?.status?.toUpperCase()}`
+            : `Polling every 2s — status: ${incident?.status ?? '…'}`}
+        </span>
+        <button
+          onClick={onReset}
+          className="text-sm px-4 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+        >
+          New incident
+        </button>
+      </div>
+
     </div>
   );
 }
