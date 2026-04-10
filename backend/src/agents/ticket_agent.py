@@ -2,6 +2,7 @@
 import time
 import json
 import threading
+from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,7 @@ from src.config import settings
 
 DEDUP_THRESHOLD = 0.75
 DEDUP_LOOKBACK = 20
+DEDUP_WINDOW_HOURS = 72  # Only deduplicate against tickets created in the last 72 hours
 
 # Serializes dedup-check + ticket-insert across concurrent pipeline threads.
 # Without this lock, two incidents arriving simultaneously both pass the dedup
@@ -38,12 +40,20 @@ class TicketDeduplicator:
         threshold: float = DEDUP_THRESHOLD,
     ) -> tuple[Ticket, float] | None:
         """Return (ticket, score) if a duplicate is found, else None."""
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=DEDUP_WINDOW_HOURS)
         recent = (
             self._db.query(Ticket)
             .join(Incident, Ticket.incident_id == Incident.id)
             .filter(
                 Ticket.status == "created",
-                Incident.status.notin_(["deduplicated", "error"]),
+                # Exclude tickets that never completed (Trello call failed)
+                Ticket.trello_card_id != "pending",
+                # Exclude mock tickets — they don't exist in real Trello
+                ~Ticket.trello_card_id.like("mock-%"),
+                # Exclude resolved/deduplicated/error incidents
+                Incident.status.notin_(["deduplicated", "error", "resolved"]),
+                # Only look at tickets from the last 72 hours
+                Ticket.created_at >= cutoff,
             )
             .order_by(Ticket.created_at.desc())
             .limit(DEDUP_LOOKBACK)
