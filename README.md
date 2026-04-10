@@ -1,7 +1,7 @@
 # SRE Incident Intake & Triage Agent
 
 > Submitted for **AgentX Hackathon** by SoftServe — April 2026  
-> Tag: [#AgentXHackathon](https://www.youtube.com/watch?v=dMw-ql1aN5o) — [📺 Demo Video](https://www.youtube.com/watch?v=dMw-ql1aN5o)
+> Tag: [#AgentXHackathon](https://www.youtube.com/watch?v=dMw-ql1aN5o) 
 
 ---
 
@@ -109,7 +109,7 @@ Every minute of downtime in e-commerce has a direct cost in lost revenue. This s
 
 ## Demo
 
-> 🎬 **Video demo:** [YouTube link — add before submission] (max 3 min, English, #AgentXHackathon)
+> 🎬 **Video demo:** https://www.youtube.com/watch?v=dMw-ql1aN5o
 
 **What the demo shows:**
 1. Submitting an incident report with a screenshot of a 500 error in checkout
