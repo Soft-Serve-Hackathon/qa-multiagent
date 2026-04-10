@@ -132,7 +132,7 @@ function getStageState(
   return allPriorSettled ? 'active' : 'pending';
 }
 
-function stageClasses(state: StageState, color: string) {
+function stageClasses(state: StageState) {
   const base = 'relative flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-base font-bold transition-all duration-300';
   switch (state) {
     case 'done':    return `${base} bg-green-500 text-white shadow-sm`;
@@ -378,7 +378,7 @@ function StageCard({
     <div className="flex items-start gap-3">
       {/* Left: circle + connector */}
       <div className="flex flex-col items-center">
-        <div className={stageClasses(state, stage.color)}>
+        <div className={stageClasses(state)}>
           {state === 'active' ? (
             <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -434,7 +434,7 @@ function StageCard({
         {/* Inline key metrics for done stages */}
         {state === 'done' && event && !expanded && (
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-            <StageInlineSummary stageKey={stage.key} meta={event.metadata} incident={incident} />
+            <StageInlineSummary stageKey={stage.key} meta={event.metadata} />
           </div>
         )}
 
@@ -454,11 +454,9 @@ function StageCard({
 function StageInlineSummary({
   stageKey,
   meta,
-  incident,
 }: {
   stageKey: string;
   meta: Record<string, any>;
-  incident: IncidentStatus | null;
 }) {
   const chip = (text: string, color = 'text-slate-500') => (
     <span key={text} className={`text-xs ${color}`}>{text}</span>
@@ -524,7 +522,7 @@ export default function StatusTracker({ incidentId, traceId, onReset }: StatusTr
       setIncident(incRes.data);
       setEvents(evRes.data.events ?? []);
       setError(null);
-    } catch (err: any) {
+    } catch {
       setError('Failed to fetch status — retrying…');
     }
   }, [incidentId, traceId]);
