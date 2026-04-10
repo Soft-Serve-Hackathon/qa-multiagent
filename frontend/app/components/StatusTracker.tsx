@@ -288,7 +288,7 @@ function NotifyDetail({ meta }: { meta: Record<string, any> }) {
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
       <MetaRow label="Slack" value={meta.slack_ok ? 'sent' : 'failed'} />
-      <MetaRow label="Email" value={meta.email_ok ? 'sent' : 'failed'} />
+
       <MetaRow label="Mode" value={meta.mock ? 'mock' : 'real'} />
     </div>
   );
@@ -517,7 +517,7 @@ function StageInlineSummary({
     case 'notify':
       return <>
         {chip(`slack: ${meta.slack_ok ? 'sent' : 'failed'}`, meta.slack_ok ? 'text-green-600' : 'text-red-500')}
-        {chip(`email: ${meta.email_ok ? 'sent' : 'failed'}`, meta.email_ok ? 'text-green-600' : 'text-red-500')}
+
       </>;
     default:
       return null;

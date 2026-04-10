@@ -15,7 +15,6 @@ export default function IncidentForm({ onSubmit, onError, inlineError }: Inciden
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    reporter_email: '',
   });
 
   const [file, setFile] = useState<File | null>(null);
@@ -99,7 +98,7 @@ export default function IncidentForm({ onSubmit, onError, inlineError }: Inciden
       const formDataObj = new FormData();
       formDataObj.append('title', formData.title);
       formDataObj.append('description', formData.description);
-      formDataObj.append('reporter_email', formData.reporter_email);
+      formDataObj.append('reporter_email', 'no-reply@incident-system.local');
       if (file) formDataObj.append('attachment', file);
 
       const response = await axios.post(`/api/incidents`, formDataObj, {
