@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import {
+  IconInbox, IconCpuChip, IconLink, IconTicket, IconBell, IconCheckCircle,
+  IconArrowUpRight, IconArrowPath, IconExclamationTriangle,
+} from './Icons';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -143,8 +147,9 @@ export default function Dashboard() {
       setStats(res.data);
       setError(null);
       setLastRefresh(new Date());
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load dashboard data');
+    } catch (err) {
+      const e = err as any;
+      setError(e?.response?.data?.detail || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -178,9 +183,9 @@ export default function Dashboard() {
           </span>
           <button
             onClick={() => { setLoading(true); fetchStats(); }}
-            className="px-3 py-1.5 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors"
+            className="px-3 py-1.5 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors flex items-center gap-1.5"
           >
-            ↻ Refresh
+            <IconArrowPath className="w-3.5 h-3.5" /> Refresh
           </button>
         </div>
       </div>
@@ -188,7 +193,7 @@ export default function Dashboard() {
       {/* ── Error state ──────────────────────────────────────────────────────── */}
       {error && (
         <div className="alert alert-error flex items-start gap-3">
-          <span className="text-red-500 text-lg leading-5 shrink-0">⚠</span>
+          <IconExclamationTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold text-sm">Could not load dashboard</p>
             <p className="text-sm mt-0.5">{error}</p>
@@ -283,19 +288,19 @@ export default function Dashboard() {
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
               {(
                 [
-                  ['received',     '📥'],
-                  ['triaging',     '🤖'],
-                  ['deduplicated', '🔗'],
-                  ['ticketed',     '🎫'],
-                  ['notified',     '📢'],
-                  ['resolved',     '✅'],
+                  ['received',     IconInbox],
+                  ['triaging',     IconCpuChip],
+                  ['deduplicated', IconLink],
+                  ['ticketed',     IconTicket],
+                  ['notified',     IconBell],
+                  ['resolved',     IconCheckCircle],
                 ] as const
-              ).map(([key, icon]) => {
+              ).map(([key, StageIcon]) => {
                 const val = stats.status_breakdown[key as keyof StatusBreakdown];
                 const style = STATUS_STYLES[key];
                 return (
-                  <div key={key} className="flex flex-col items-center gap-1 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                    <span className="text-xl">{icon}</span>
+                  <div key={key} className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <StageIcon className={`w-5 h-5 ${style.dot.replace('bg-', 'text-')}`} />
                     <span className="text-xl font-bold text-slate-900">{val}</span>
                     <span className="text-xs text-slate-500 capitalize">{style.label}</span>
                   </div>
@@ -339,7 +344,7 @@ export default function Dashboard() {
                             </span>
                             {inc.deduplicated && (
                               <span className="inline-flex items-center gap-1 text-xs text-purple-600 font-medium">
-                                🔗 deduplicated
+                                <IconLink className="w-3 h-3" /> deduplicated
                               </span>
                             )}
                           </div>
@@ -379,7 +384,8 @@ export default function Dashboard() {
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
                             >
-                              {inc.trello_card_id ? inc.trello_card_id.replace('mock-trello-', '#') : 'View'} ↗
+                              {inc.trello_card_id ? inc.trello_card_id.replace('mock-trello-', '#') : 'View'}
+                              <IconArrowUpRight className="w-3 h-3" />
                             </a>
                           ) : (
                             <span className="text-slate-400 text-xs">—</span>

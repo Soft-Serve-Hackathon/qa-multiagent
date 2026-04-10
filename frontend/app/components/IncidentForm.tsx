@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import FormInput from './ui/FormInput';
+import { IconDocumentText, IconExclamationTriangle } from './Icons';
 
 interface IncidentFormProps {
   onSubmit: (incidentId: number, traceId: string) => void;
@@ -217,8 +218,8 @@ export default function IncidentForm({ onSubmit, onError, inlineError }: Inciden
                 className="w-16 h-16 object-cover rounded-lg border border-slate-200 flex-shrink-0"
               />
             ) : (
-              <div className="w-16 h-16 flex items-center justify-center bg-slate-200 rounded-lg flex-shrink-0 text-2xl">
-                📄
+              <div className="w-16 h-16 flex items-center justify-center bg-slate-200 rounded-lg flex-shrink-0">
+                <IconDocumentText className="w-8 h-8 text-slate-500" />
               </div>
             )}
             <div className="flex-1 min-w-0">
@@ -244,7 +245,7 @@ export default function IncidentForm({ onSubmit, onError, inlineError }: Inciden
       {/* Inline error — form stays intact */}
       {inlineError && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 flex items-start gap-3">
-          <span className="text-red-500 text-base leading-5 flex-shrink-0">&#9888;</span>
+          <IconExclamationTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-red-700 font-medium">{inlineError}</p>
         </div>
       )}
