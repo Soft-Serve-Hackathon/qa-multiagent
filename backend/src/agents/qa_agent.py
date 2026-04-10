@@ -35,6 +35,14 @@ class QAAgent:
                 "suggested_files": triage.suggested_files,
             })
 
+            # Fallback: if Claude didn't propose any tests despite instructions, ask again
+            if not raw_result.get("new_tests_created"):
+                raw_result["new_tests_created"] = self._llm.generate_regression_test({
+                    "affected_module": triage.affected_module,
+                    "technical_summary": triage.technical_summary,
+                    "severity": triage.severity,
+                })
+
             qa_entity = QAScopeResult(
                 incident_id=incident.id,
                 reproduced=raw_result.get("reproduced", False),

@@ -197,7 +197,7 @@ function QaDetail({ meta }: { meta: Record<string, any> }) {
   if (meta.error) return <ErrorDetail message={meta.error} />;
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-      <MetaRow label="Reproduced" value={meta.reproduced ? 'yes' : 'no'} />
+      <MetaRow label="Test coverage" value={meta.reproduced ? 'existing test found' : 'no coverage — test proposed'} />
       <MetaRow label="Failing tests" value={meta.failing_tests_count} />
       <MetaRow label="New tests proposed" value={meta.new_tests_count} />
       <MetaRow label="Coverage files" value={meta.coverage_files_found} />
@@ -497,7 +497,7 @@ function StageInlineSummary({
       </>;
     case 'qa_scope':
       return <>
-        {chip(meta.reproduced ? 'reproduced' : 'not reproduced', meta.reproduced ? 'text-green-600' : 'text-slate-500')}
+        {chip(meta.reproduced ? 'existing test found' : 'no prior coverage', meta.reproduced ? 'text-green-600' : 'text-slate-500')}
         {meta.new_tests_count > 0 && chip(`${meta.new_tests_count} test(s) proposed`, 'text-cyan-600')}
       </>;
     case 'fix_recommendation':
