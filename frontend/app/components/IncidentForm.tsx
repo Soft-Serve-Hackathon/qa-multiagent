@@ -111,8 +111,9 @@ export default function IncidentForm({ onSubmit, onError, inlineError }: Inciden
       } else {
         onError('No incident ID returned from server');
       }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || err.message || 'Failed to submit incident';
+    } catch (err) {
+      const e = err as any;
+      const errorMessage = e?.response?.data?.detail || e?.message || 'Failed to submit incident';
       onError(errorMessage);
     } finally {
       setIsLoading(false);
