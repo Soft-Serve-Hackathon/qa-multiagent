@@ -118,6 +118,7 @@ class TicketAgent:
                     metadata={
                         "linked_ticket_id": existing_ticket.id,
                         "linked_card_id": existing_ticket.trello_card_id,
+                        "linked_card_url": existing_ticket.trello_card_url or "",
                         "similarity_score": round(similarity_score, 3),
                         "threshold": DEDUP_THRESHOLD,
                     },

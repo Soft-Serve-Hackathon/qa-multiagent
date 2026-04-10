@@ -227,15 +227,45 @@ function FixDetail({ meta }: { meta: Record<string, any> }) {
 }
 
 function TicketDetail({ meta }: { meta: Record<string, any> }) {
+  const isDedupEvent = meta.similarity_score != null; // deduplicated events have similarity_score, created ones don't
+
+  if (isDedupEvent) {
+    const simPct = Math.round(meta.similarity_score * 100);
+    const threshPct = meta.threshold != null ? Math.round(meta.threshold * 100) : 75;
+    const cardUrl = meta.linked_card_url || meta.card_url;
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+            Deduplicated
+          </span>
+          <span className="text-xs text-slate-500">
+            {simPct}% match &gt; {threshPct}% threshold
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          <MetaRow label="Matched card" value={meta.linked_card_id} />
+          <MetaRow label="Internal ticket" value={meta.linked_ticket_id ? `#${meta.linked_ticket_id}` : undefined} />
+          <MetaRow label="Mode" value={meta.mock ? 'mock' : 'real'} />
+        </div>
+        {cardUrl && (
+          <a
+            href={cardUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-amber-700 hover:underline font-medium"
+          >
+            Open original Trello card <IconArrowUpRight className="w-3 h-3" />
+          </a>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-        {meta.linked_card_id || meta.card_id ? (
-          <MetaRow label="Card ID" value={meta.linked_card_id || meta.card_id} />
-        ) : null}
-        {meta.similarity_score != null && (
-          <MetaRow label="Similarity" value={`${Math.round(meta.similarity_score * 100)}%`} />
-        )}
+        {meta.card_id ? <MetaRow label="Card ID" value={meta.card_id} /> : null}
         <MetaRow label="QA included" value={meta.qa_included ? 'yes' : '—'} />
         <MetaRow label="Fix included" value={meta.fix_included ? 'yes' : '—'} />
         <MetaRow label="Mode" value={meta.mock ? 'mock' : 'real'} />
@@ -580,17 +610,53 @@ export default function StatusTracker({ incidentId, traceId, onReset }: StatusTr
       )}
 
       {/* ── Deduplicated banner ───────────────────────────────────────────── */}
-      {isDeduplicated && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
-            <IconExclamationTriangle className="w-4 h-4" /> Duplicate Detected
-          </p>
-          <p className="text-xs text-amber-700 mt-0.5">
-            This incident matches an existing open ticket.
-            {incident?.linked_ticket_id ? ` Linked to ticket #${incident.linked_ticket_id}.` : ''}
-          </p>
-        </div>
-      )}
+      {isDeduplicated && (() => {
+        const dedupEvent = events.find(e => e.stage === 'ticket' && e.status === 'deduplicated');
+        const similarity = dedupEvent?.metadata?.similarity_score;
+        const threshold = dedupEvent?.metadata?.threshold;
+        const linkedCardId = dedupEvent?.metadata?.linked_card_id || incident?.trello_card_id;
+        const linkedCardUrl = dedupEvent?.metadata?.linked_card_url || incident?.trello_card_url;
+        const simPct = similarity != null ? Math.round(similarity * 100) : null;
+        const threshPct = threshold != null ? Math.round(threshold * 100) : 75;
+        return (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <IconExclamationTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-amber-900">Duplicate incident — not creating a new ticket</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  This report was automatically matched to an existing open ticket
+                  {simPct != null ? ` with ${simPct}% similarity` : ''} (threshold: {threshPct}%).
+                  No duplicate card was created in Trello.
+                </p>
+              </div>
+            </div>
+            {(linkedCardId || incident?.linked_ticket_id) && (
+              <div className="bg-white border border-amber-200 rounded-lg px-3 py-2.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-slate-500 mb-0.5">Linked to existing ticket</p>
+                  {linkedCardId && (
+                    <code className="text-xs font-mono text-slate-800 truncate block">{linkedCardId}</code>
+                  )}
+                  {incident?.linked_ticket_id && (
+                    <p className="text-xs text-slate-400 mt-0.5">Internal ticket #{incident.linked_ticket_id}</p>
+                  )}
+                </div>
+                {linkedCardUrl && (
+                  <a
+                    href={linkedCardUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-600 transition-colors"
+                  >
+                    View in Trello <IconArrowUpRight className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Progress bar ──────────────────────────────────────────────────── */}
       <PipelineProgress events={events} isComplete={isComplete} />
@@ -623,7 +689,7 @@ export default function StatusTracker({ incidentId, traceId, onReset }: StatusTr
       </div>
 
       {/* ── Trello CTA ────────────────────────────────────────────────────── */}
-      {trelloUrl && incident?.trello_card_id && incident.trello_card_id !== 'pending' && (
+      {trelloUrl && incident?.trello_card_id && incident.trello_card_id !== 'pending' && !isDeduplicated && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-green-900">Trello card created</p>
