@@ -2,6 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import {
+  IconInbox, IconCpuChip, IconBeaker, IconWrench, IconTicket, IconBell, IconCheckCircle,
+  IconCheck, IconMinus, IconXMark, IconChevronDown, IconClipboard,
+  IconArrowUpRight, IconArrowPath, IconExclamationTriangle, IconSpinner,
+} from './Icons';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,51 +49,44 @@ const PIPELINE_STAGES = [
   {
     key: 'ingest',
     label: 'Ingest & Validate',
-    icon: '📥',
+    Icon: IconInbox,
     description: 'Validates input, detects prompt injection, assigns trace ID',
-    color: 'blue',
   },
   {
     key: 'triage',
     label: 'AI Triage',
-    icon: '🤖',
+    Icon: IconCpuChip,
     description: 'Claude analyzes the incident and searches the Medusa.js codebase',
-    color: 'violet',
   },
   {
     key: 'qa_scope',
     label: 'QA Scope',
-    icon: '🧪',
+    Icon: IconBeaker,
     description: 'Evaluates test coverage and proposes regression tests',
-    color: 'cyan',
   },
   {
     key: 'fix_recommendation',
     label: 'Fix Recommendation',
-    icon: '🔧',
+    Icon: IconWrench,
     description: 'Proposes a concrete fix with risk assessment',
-    color: 'amber',
   },
   {
     key: 'ticket',
     label: 'Ticket Creation',
-    icon: '🎫',
+    Icon: IconTicket,
     description: 'Checks for duplicates and creates enriched Trello card',
-    color: 'green',
   },
   {
     key: 'notify',
     label: 'Notifications',
-    icon: '📢',
+    Icon: IconBell,
     description: 'Sends Slack alert to team and confirmation email to reporter',
-    color: 'pink',
   },
   {
     key: 'resolved',
     label: 'Resolved',
-    icon: '✅',
+    Icon: IconCheckCircle,
     description: 'Incident resolved — resolution email sent to reporter',
-    color: 'emerald',
   },
 ];
 
@@ -159,7 +157,7 @@ function IngestDetail({ meta }: { meta: Record<string, any> }) {
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
       <MetaRow label="Attachment" value={meta.attachment_type || 'none'} />
-      <MetaRow label="Injection check" value={meta.injection_check === 'passed' ? '✅ passed' : '⚠️ checked'} />
+      <MetaRow label="Injection check" value={meta.injection_check === 'passed' ? 'passed' : 'checked'} />
     </div>
   );
 }
@@ -199,7 +197,7 @@ function QaDetail({ meta }: { meta: Record<string, any> }) {
   if (meta.error) return <ErrorDetail message={meta.error} />;
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-      <MetaRow label="Reproduced" value={meta.reproduced ? '✅ yes' : '❌ no'} />
+      <MetaRow label="Reproduced" value={meta.reproduced ? 'yes' : 'no'} />
       <MetaRow label="Failing tests" value={meta.failing_tests_count} />
       <MetaRow label="New tests proposed" value={meta.new_tests_count} />
       <MetaRow label="Coverage files" value={meta.coverage_files_found} />
@@ -238,8 +236,8 @@ function TicketDetail({ meta }: { meta: Record<string, any> }) {
         {meta.similarity_score != null && (
           <MetaRow label="Similarity" value={`${Math.round(meta.similarity_score * 100)}%`} />
         )}
-        <MetaRow label="QA included" value={meta.qa_included ? '✅' : '—'} />
-        <MetaRow label="Fix included" value={meta.fix_included ? '✅' : '—'} />
+        <MetaRow label="QA included" value={meta.qa_included ? 'yes' : '—'} />
+        <MetaRow label="Fix included" value={meta.fix_included ? 'yes' : '—'} />
         <MetaRow label="Mode" value={meta.mock ? 'mock' : 'real'} />
       </div>
       {meta.card_url && (
@@ -249,7 +247,7 @@ function TicketDetail({ meta }: { meta: Record<string, any> }) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline font-medium"
         >
-          Open Trello card ↗
+          Open Trello card <IconArrowUpRight className="w-3 h-3" />
         </a>
       )}
     </div>
@@ -259,8 +257,8 @@ function TicketDetail({ meta }: { meta: Record<string, any> }) {
 function NotifyDetail({ meta }: { meta: Record<string, any> }) {
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-      <MetaRow label="Slack" value={meta.slack_ok ? '✅ sent' : '❌ failed'} />
-      <MetaRow label="Email" value={meta.email_ok ? '✅ sent' : '❌ failed'} />
+      <MetaRow label="Slack" value={meta.slack_ok ? 'sent' : 'failed'} />
+      <MetaRow label="Email" value={meta.email_ok ? 'sent' : 'failed'} />
       <MetaRow label="Mode" value={meta.mock ? 'mock' : 'real'} />
     </div>
   );
@@ -380,18 +378,15 @@ function StageCard({
       <div className="flex flex-col items-center">
         <div className={stageClasses(state)}>
           {state === 'active' ? (
-            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
+            <IconSpinner className="w-4 h-4" />
           ) : state === 'done' ? (
-            <span className="text-sm">✓</span>
+            <IconCheck className="w-4 h-4" />
           ) : state === 'skipped' ? (
-            <span className="text-sm">⤼</span>
+            <IconMinus className="w-4 h-4" />
           ) : state === 'error' ? (
-            <span className="text-sm">✕</span>
+            <IconXMark className="w-4 h-4" />
           ) : (
-            <span className="text-base">{stage.icon}</span>
+            <stage.Icon className="w-5 h-5" />
           )}
         </div>
         {!isLast && (
@@ -425,9 +420,7 @@ function StageCard({
             )}
           </div>
           {hasDetail && (
-            <span className={`text-slate-400 text-xs flex-shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}>
-              ▾
-            </span>
+            <IconChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
           )}
         </div>
 
@@ -474,7 +467,7 @@ function StageInlineSummary({
       </>;
     case 'qa_scope':
       return <>
-        {chip(meta.reproduced ? '✅ reproduced' : '❌ not reproduced', meta.reproduced ? 'text-green-600' : 'text-slate-500')}
+        {chip(meta.reproduced ? 'reproduced' : 'not reproduced', meta.reproduced ? 'text-green-600' : 'text-slate-500')}
         {meta.new_tests_count > 0 && chip(`${meta.new_tests_count} test(s) proposed`, 'text-cyan-600')}
       </>;
     case 'fix_recommendation':
@@ -493,8 +486,8 @@ function StageInlineSummary({
       </>;
     case 'notify':
       return <>
-        {chip(`slack: ${meta.slack_ok ? '✅' : '❌'}`, meta.slack_ok ? 'text-green-600' : 'text-red-500')}
-        {chip(`email: ${meta.email_ok ? '✅' : '❌'}`, meta.email_ok ? 'text-green-600' : 'text-red-500')}
+        {chip(`slack: ${meta.slack_ok ? 'sent' : 'failed'}`, meta.slack_ok ? 'text-green-600' : 'text-red-500')}
+        {chip(`email: ${meta.email_ok ? 'sent' : 'failed'}`, meta.email_ok ? 'text-green-600' : 'text-red-500')}
       </>;
     default:
       return null;
@@ -562,7 +555,8 @@ export default function StatusTracker({ incidentId, traceId, onReset }: StatusTr
             onClick={handleCopy}
             className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 px-2 py-0.5 rounded border border-slate-300 hover:border-slate-400 bg-white transition-colors"
           >
-            {copied ? '✓ Copied' : '⧉ Copy'}
+            {copied ? <IconCheck className="w-3 h-3" /> : <IconClipboard className="w-3 h-3" />}
+            {copied ? 'Copied' : 'Copy'}
           </button>
         </div>
         <code className="font-mono text-xs text-slate-800 break-all">{traceId}</code>
@@ -588,7 +582,9 @@ export default function StatusTracker({ incidentId, traceId, onReset }: StatusTr
       {/* ── Deduplicated banner ───────────────────────────────────────────── */}
       {isDeduplicated && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          <p className="text-sm font-semibold text-amber-900">⚠️ Duplicate Detected</p>
+          <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
+            <IconExclamationTriangle className="w-4 h-4" /> Duplicate Detected
+          </p>
           <p className="text-xs text-amber-700 mt-0.5">
             This incident matches an existing open ticket.
             {incident?.linked_ticket_id ? ` Linked to ticket #${incident.linked_ticket_id}.` : ''}
@@ -639,7 +635,7 @@ export default function StatusTracker({ incidentId, traceId, onReset }: StatusTr
             rel="noopener noreferrer"
             className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700 transition-colors"
           >
-            Open in Trello ↗
+            Open in Trello <IconArrowUpRight className="w-3.5 h-3.5" />
           </a>
         </div>
       )}
@@ -651,10 +647,12 @@ export default function StatusTracker({ incidentId, traceId, onReset }: StatusTr
 
       {/* ── Footer status + reset ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
-        <span className="text-xs text-slate-400">
-          {isComplete
-            ? `✓ Status: ${incident?.status?.toUpperCase()}`
-            : `Polling every 2s — status: ${incident?.status ?? '…'}`}
+        <span className="text-xs text-slate-400 flex items-center gap-1">
+          {isComplete ? (
+            <><IconCheck className="w-3 h-3 text-green-500" /> Status: {incident?.status?.toUpperCase()}</>
+          ) : (
+            <><IconArrowPath className="w-3 h-3 animate-spin" /> Polling — {incident?.status ?? '…'}</>
+          )}
         </span>
         <button
           onClick={onReset}

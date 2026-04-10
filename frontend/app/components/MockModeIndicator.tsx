@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { IconShieldExclamation } from './Icons';
 
 export default function MockModeIndicator() {
   const [isMockMode, setIsMockMode] = useState<boolean | null>(null);
@@ -39,7 +40,7 @@ export default function MockModeIndicator() {
       }}
     >
       <div className="flex items-center gap-2">
-        <span className="text-2xl">🎭</span>
+        <IconShieldExclamation className="w-5 h-5 text-amber-700 flex-shrink-0" />
         <div>
           <p className="text-sm font-bold text-amber-900">MOCK MODE</p>
           <p className="text-xs text-amber-700">No real integrations</p>
