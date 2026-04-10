@@ -1,6 +1,7 @@
 """TicketAgent — deduplicates, then creates a Trello card enriched with QA + fix context."""
 import time
 import json
+import threading
 from difflib import SequenceMatcher
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,11 @@ from src.config import settings
 
 DEDUP_THRESHOLD = 0.75
 DEDUP_LOOKBACK = 20
+
+# Serializes dedup-check + ticket-insert across concurrent pipeline threads.
+# Without this lock, two incidents arriving simultaneously both pass the dedup
+# check before either commits its ticket → duplicate cards in Trello.
+_dedup_lock = threading.Lock()
 
 
 class TicketDeduplicator:
@@ -88,41 +94,60 @@ class TicketAgent:
         start = time.monotonic()
         incident: Incident = self._db.query(Incident).filter(Incident.id == triage.incident_id).first()
 
-        # ── Deduplication check ───────────────────────────────────────────────
-        deduplicator = TicketDeduplicator(self._db)
-        dedup_result = deduplicator.find_similar_ticket(
-            incident_title=incident.title,
-            incident_description=incident.description,
-            affected_module=triage.affected_module,
-        )
+        # ── Deduplication check + ticket creation (atomic under lock) ──────────
+        # Lock prevents race condition: two simultaneous pipelines both passing
+        # the dedup check before either commits its ticket to the database.
+        with _dedup_lock:
+            deduplicator = TicketDeduplicator(self._db)
+            dedup_result = deduplicator.find_similar_ticket(
+                incident_title=incident.title,
+                incident_description=incident.description,
+                affected_module=triage.affected_module,
+            )
 
-        if dedup_result:
-            existing_ticket, similarity_score = dedup_result
-            incident.status = "deduplicated"
-            incident.linked_ticket_id = existing_ticket.id
+            if dedup_result:
+                existing_ticket, similarity_score = dedup_result
+                incident.status = "deduplicated"
+                incident.linked_ticket_id = existing_ticket.id
+                self._db.commit()
+
+                duration_ms = int((time.monotonic() - start) * 1000)
+                emit_event(
+                    "ticket", "deduplicated", triage.trace_id, duration_ms,
+                    incident_id=incident.id,
+                    metadata={
+                        "linked_ticket_id": existing_ticket.id,
+                        "linked_card_id": existing_ticket.trello_card_id,
+                        "similarity_score": round(similarity_score, 3),
+                        "threshold": DEDUP_THRESHOLD,
+                    },
+                )
+
+                return TicketDTO(
+                    incident_id=incident.id,
+                    trace_id=triage.trace_id,
+                    trello_card_id=existing_ticket.trello_card_id or "",
+                    trello_card_url=existing_ticket.trello_card_url or "",
+                    trello_list_id=existing_ticket.trello_list_id,
+                    deduplicated=True,
+                    linked_ticket_id=existing_ticket.id,
+                )
+
+            # ── Commit a placeholder ticket row BEFORE releasing the lock ─────
+            # This ensures the next thread sees this incident as "taken" when it
+            # runs its own dedup check, even before the Trello API call completes.
+            ticket_entity = Ticket(
+                incident_id=incident.id,
+                trello_card_id="pending",
+                trello_card_url="",
+                trello_list_id=settings.TRELLO_LIST_ID or "default",
+                status="created",
+            )
+            self._db.add(ticket_entity)
+            incident.status = "ticketed"
             self._db.commit()
-
-            duration_ms = int((time.monotonic() - start) * 1000)
-            emit_event(
-                "ticket", "deduplicated", triage.trace_id, duration_ms,
-                incident_id=incident.id,
-                metadata={
-                    "linked_ticket_id": existing_ticket.id,
-                    "linked_card_id": existing_ticket.trello_card_id,
-                    "similarity_score": round(similarity_score, 3),
-                    "threshold": DEDUP_THRESHOLD,
-                },
-            )
-
-            return TicketDTO(
-                incident_id=incident.id,
-                trace_id=triage.trace_id,
-                trello_card_id=existing_ticket.trello_card_id or "",
-                trello_card_url=existing_ticket.trello_card_url or "",
-                trello_list_id=existing_ticket.trello_list_id,
-                deduplicated=True,
-                linked_ticket_id=existing_ticket.id,
-            )
+            self._db.refresh(ticket_entity)
+        # lock released — Trello API call happens outside the lock (slow I/O)
 
         # ── Build card description ────────────────────────────────────────────
         files_list = "\n".join(f"- {f}" for f in triage.suggested_files) or "- No specific files identified"
@@ -186,15 +211,9 @@ class TicketAgent:
                 items=triage.suggested_files,
             )
 
-        ticket_entity = Ticket(
-            incident_id=incident.id,
-            trello_card_id=result["card_id"],
-            trello_card_url=result["card_url"],
-            trello_list_id=settings.TRELLO_LIST_ID or "default",
-            status="created",
-        )
-        self._db.add(ticket_entity)
-        incident.status = "ticketed"
+        # Update the placeholder row with the real Trello card data
+        ticket_entity.trello_card_id = result["card_id"]
+        ticket_entity.trello_card_url = result["card_url"]
         self._db.commit()
 
         duration_ms = int((time.monotonic() - start) * 1000)
