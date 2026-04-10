@@ -3,15 +3,20 @@
 @import 'tailwindcss/utilities';
 
 :root {
-  --primary-dark: #1e293b;
-  --primary-light: #f8fafc;
+  --primary: #4f46e5;
+  --primary-dark: #4338ca;
+  --primary-light: #e0e7ff;
+  --secondary: #8b5cf6;
+  --accent: #06b6d4;
   --success: #10b981;
   --error: #ef4444;
   --warning: #f59e0b;
+  --neutral-dark: #0f172a;
+  --neutral-light: #f8fafc;
 }
 
 * {
-  @apply transition-colors duration-200;
+  @apply transition-colors duration-300;
 }
 
 html {
@@ -19,13 +24,28 @@ html {
 }
 
 body {
-  @apply bg-gradient-to-br from-slate-50 to-slate-100 text-slate-900;
+  @apply bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 text-slate-900;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
 }
 
 main {
   @apply min-h-screen;
 }
 
+/* Typography */
+h1 {
+  @apply text-4xl md:text-5xl font-bold text-slate-900 tracking-tight;
+}
+
+h2 {
+  @apply text-3xl md:text-4xl font-bold text-slate-900 tracking-tight;
+}
+
+h3 {
+  @apply text-xl md:text-2xl font-semibold text-slate-900;
+}
+
+/* Forms */
 .container-custom {
   @apply max-w-xl mx-auto px-4 py-8;
 }
@@ -35,20 +55,35 @@ main {
 }
 
 .input-field {
-  @apply w-full px-4 py-2 border border-slate-300 rounded-lg 
-         focus:ring-2 focus:ring-slate-600 focus:border-transparent
-         transition-all duration-200;
+  @apply w-full px-4 py-3 border border-slate-200 rounded-lg 
+         bg-white text-slate-900
+         placeholder-slate-400
+         focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+         focus:outline-none
+         transition-all duration-200 shadow-sm hover:border-slate-300;
+}
+
+.input-field::placeholder {
+  @apply text-slate-400;
 }
 
 .button-primary {
-  @apply px-6 py-3 bg-blue-600 text-white rounded-lg font-medium
-         hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed
-         transition-all duration-200;
+  @apply px-8 py-3 bg-indigo-600 text-white rounded-lg font-semibold
+         hover:bg-indigo-700 active:bg-indigo-800
+         disabled:opacity-50 disabled:cursor-not-allowed
+         transition-all duration-200 shadow-md hover:shadow-lg;
 }
 
 .button-secondary {
-  @apply px-6 py-2 bg-slate-200 text-slate-900 rounded-lg font-medium
-         hover:bg-slate-300 transition-all duration-200;
+  @apply px-6 py-3 bg-slate-100 text-slate-900 rounded-lg font-medium
+         hover:bg-slate-200 active:bg-slate-300
+         transition-all duration-200 border border-slate-200;
+}
+
+.button-tertiary {
+  @apply px-6 py-3 text-indigo-600 font-semibold
+         hover:text-indigo-700 hover:bg-indigo-50
+         transition-all duration-200 rounded-lg;
 }
 
 .alert {
