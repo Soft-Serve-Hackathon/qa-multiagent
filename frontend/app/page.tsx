@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import type React from 'react';
 import IncidentForm from './components/IncidentForm';
 import StatusTracker from './components/StatusTracker';
 import Dashboard from './components/Dashboard';
@@ -35,9 +34,9 @@ export default function Home() {
     setInlineError(null);
   };
 
-  const tabs: { id: ActiveTab; label: string; Icon: React.FC<{ className?: string }> }[] = [
-    { id: 'incident', label: 'Report Incident', Icon: IconBolt },
-    { id: 'dashboard', label: 'Dashboard', Icon: IconChartBar },
+  const tabs = [
+    { id: 'incident' as ActiveTab, label: 'Report Incident', Icon: IconBolt },
+    { id: 'dashboard' as ActiveTab, label: 'Dashboard', Icon: IconChartBar },
   ];
 
   return (
