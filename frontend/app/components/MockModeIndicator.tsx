@@ -22,36 +22,27 @@ export default function MockModeIndicator() {
     };
 
     checkMockMode();
-    // Check every 30 seconds in case mode changes
     const interval = setInterval(checkMockMode, 30000);
-
     return () => clearInterval(interval);
   }, []);
 
-  if (isLoading || isMockMode === null || !isMockMode) {
-    return null;
-  }
+  if (isLoading || isMockMode === null || !isMockMode) return null;
 
   return (
-    <div
-      className="fixed top-4 right-4 z-50 px-4 py-2 bg-amber-100 border-2 border-amber-400 rounded-lg shadow-lg"
-      style={{
-        animation: 'pulse 2s infinite',
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <IconShieldExclamation className="w-5 h-5 text-amber-700 flex-shrink-0" />
-        <div>
-          <p className="text-sm font-bold text-amber-900">MOCK MODE</p>
-          <p className="text-xs text-amber-700">No real integrations</p>
-        </div>
+    <div className="fixed top-4 right-4 z-50 inline-flex items-center gap-2.5 px-3.5 py-2 bg-amber-500/10 border border-amber-400/40 rounded-[10px]">
+      <span className="relative flex h-1.5 w-1.5 shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500" />
+      </span>
+      <IconShieldExclamation className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+      <div>
+        <p className="text-xs font-medium tracking-widest uppercase text-amber-700 leading-none">
+          Mock mode
+        </p>
+        <p className="text-[10px] text-amber-500 font-normal mt-0.5 leading-none">
+          No real integrations
+        </p>
       </div>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.7; }
-        }
-      `}</style>
     </div>
   );
 }
