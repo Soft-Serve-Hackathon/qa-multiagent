@@ -1,4 +1,4 @@
-"""NotifyAgent — dispatches Slack alert and reporter email. Severity-based escalation."""
+"""NotifyAgent — dispatches Slack alert. Email notifications disabled."""
 import time
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -6,21 +6,19 @@ from sqlalchemy.orm import Session
 from src.domain.entities import Incident, Ticket, NotificationLog
 from src.application.dto import TriageResultDTO, TicketDTO
 from src.infrastructure.external.slack_client import SlackClient
-from src.infrastructure.external.sendgrid_client import SendGridClient
 from src.infrastructure.observability.events import emit_event
 from src.config import settings
 
 
 class NotifyAgent:
     """
-    Responsibility: Send Slack alert to team and confirmation email to reporter.
+    Responsibility: Send Slack alert to team.
     Persists NotificationLog entries. Does NOT generate content — receives it as DTOs.
     """
 
     def __init__(self, db: Session):
         self._db = db
         self._slack = SlackClient()
-        self._email = SendGridClient()
 
     def process(
         self,
@@ -53,25 +51,7 @@ class NotifyAgent:
         )
         notifications_sent.append("slack")
 
-        # 2. Confirmation email to reporter
-        email_ok = self._email.send_confirmation(
-            to_email=incident.reporter_email,
-            incident_title=incident.title,
-            severity=triage.severity,
-            trello_card_id=ticket.trello_card_id,
-            trello_card_url=ticket.trello_card_url,
-        )
-        self._log_notification(
-            incident_id=incident.id,
-            channel="email",
-            recipient=incident.reporter_email,
-            notification_type="reporter_confirmation",
-            content_summary=f"Confirmation for: {incident.title}",
-            status="sent" if email_ok else "failed",
-        )
-        notifications_sent.append("email")
-
-        # 3. Update incident status
+        # Update incident status
         incident.status = "notified"
         self._db.commit()
 
@@ -90,7 +70,7 @@ class NotifyAgent:
         )
 
     def send_resolution(self, incident: Incident, ticket: Ticket) -> None:
-        """Called by ResolutionWatcher when a card moves to Done."""
+        """Called by ResolutionWatcher when a card moves to Done. Slack notification only."""
         start = time.monotonic()
         resolved_at = datetime.now(timezone.utc).isoformat()
 
@@ -98,21 +78,6 @@ class NotifyAgent:
             title=incident.title,
             trello_url=ticket.trello_card_url or "",
             trace_id=incident.trace_id,
-        )
-        self._email.send_resolution(
-            to_email=incident.reporter_email,
-            incident_title=incident.title,
-            trello_card_id=ticket.trello_card_id or "",
-            trello_card_url=ticket.trello_card_url or "",
-            resolved_at=resolved_at,
-        )
-        self._log_notification(
-            incident_id=incident.id,
-            channel="email",
-            recipient=incident.reporter_email,
-            notification_type="reporter_resolution",
-            content_summary=f"Resolution for: {incident.title}",
-            status="sent",
         )
         incident.status = "resolved"
         self._db.commit()

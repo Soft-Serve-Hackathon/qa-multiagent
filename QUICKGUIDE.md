@@ -106,7 +106,7 @@ After submitting an incident, check the trace:
 curl "http://localhost:3000/api/observability/events?trace_id=YOUR_TRACE_ID"
 ```
 
-You should see 4-5 events: `ingest → triage → ticket → notify → (resolved)`
+You should see 6-7 events: `ingest → triage → qa_scope → fix_recommendation → ticket → notify → (resolved)`
 
 Or view all recent events:
 ```bash
@@ -125,7 +125,7 @@ docker compose exec app python tests/e2e_smoke.py
 This script:
 1. Submits a test incident via POST /api/incidents
 2. Verifies HTTP 201 + trace_id
-3. Verifies GET /api/observability/events returns ≥4 events with the same trace_id
+3. Verifies GET /api/observability/events returns ≥6 events with the same trace_id
 4. Verifies GET /api/incidents/:id shows status=notified
 
 ---

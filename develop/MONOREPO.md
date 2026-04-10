@@ -8,9 +8,11 @@
 │   ├── src/
 │   │   ├── main.py                  # FastAPI app entry point
 │   │   ├── config.py                # Configuration management
-│   │   ├── agents/                  # 5 specialized agents
+│   │   ├── agents/                  # 7 specialized agents
 │   │   │   ├── ingest_agent.py
 │   │   │   ├── triage_agent.py
+│   │   │   ├── qa_agent.py
+│   │   │   ├── fix_recommendation_agent.py
 │   │   │   ├── ticket_agent.py
 │   │   │   ├── notify_agent.py
 │   │   │   └── resolution_watcher.py

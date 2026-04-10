@@ -4,6 +4,7 @@ import { useState } from 'react';
 import IncidentForm from './components/IncidentForm';
 import StatusTracker from './components/StatusTracker';
 import Dashboard from './components/Dashboard';
+import { IconBolt, IconChartBar } from './components/Icons';
 
 type ActiveTab = 'incident' | 'dashboard';
 type IncidentState = 'form' | 'tracking';
@@ -33,9 +34,9 @@ export default function Home() {
     setInlineError(null);
   };
 
-  const tabs: { id: ActiveTab; label: string; icon: string }[] = [
-    { id: 'incident', label: 'Report Incident', icon: '🚨' },
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  const tabs = [
+    { id: 'incident' as ActiveTab, label: 'Report Incident', Icon: IconBolt },
+    { id: 'dashboard' as ActiveTab, label: 'Dashboard', Icon: IconChartBar },
   ];
 
   return (
@@ -68,7 +69,7 @@ export default function Home() {
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50',
                 ].join(' ')}
               >
-                <span>{tab.icon}</span>
+                <tab.Icon className="w-4 h-4" />
                 {tab.label}
               </button>
             ))}

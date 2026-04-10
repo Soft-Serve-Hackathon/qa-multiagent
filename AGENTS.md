@@ -1,7 +1,7 @@
 # AI Agent Operating Model
 
 > **Nota:** Este archivo define los **roles de Claude Code** para colaborar en el proyecto.
-> No confundir con los **5 agentes internos del sistema SRE** (IngestAgent, TriageAgent, TicketAgent, NotifyAgent, ResolutionWatcher) documentados en `AGENTS_USE.md`.
+> No confundir con los **7 agentes internos del sistema SRE** (IngestAgent, TriageAgent, QAAgent, FixRecommendationAgent, TicketAgent, NotifyAgent, ResolutionWatcher) documentados en `AGENTS_USE.md`.
 
 Este archivo define el contrato de colaboración entre los roles de agente IA usados durante el desarrollo del MVP.
 

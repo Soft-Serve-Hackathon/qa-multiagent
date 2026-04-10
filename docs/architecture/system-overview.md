@@ -2,13 +2,13 @@
 
 **Version:** 1.0  
 **Owner:** Architect  
-**Last updated:** 2026-04-08
+**Last updated:** 2026-04-09
 
 ---
 
 ## Descripción del sistema
 
-Pipeline de 5 agentes especializados que procesan un reporte de incidente de extremo a extremo. Cada agente tiene una responsabilidad única y no solapada. El sistema es stateless entre agentes — el estado compartido vive en la base de datos SQLite.
+Pipeline de 7 agentes especializados que procesan un reporte de incidente de extremo a extremo. Cada agente tiene una responsabilidad única y no solapada. El sistema es stateless entre agentes — el estado compartido vive en la base de datos SQLite.
 
 ---
 
@@ -52,6 +52,25 @@ Pipeline de 5 agentes especializados que procesan un reporte de incidente de ext
            │
            ▼
 ┌─────────────────────────────────────────────────────────┐
+│                     QAAgent                              │
+│  • Claude claude-sonnet-4-6 (agentic loop)               │
+│  • Inspecciona suite de tests del módulo afectado        │
+│  • Evalúa cobertura existente                            │
+│  • Propone snippet de test de regresión si falta         │
+│  • Emite log: stage=qa_scope                             │
+└──────────────────────────┬──────────────────────────────┘
+                           │ qa_scope_result
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│               FixRecommendationAgent                     │
+│  • Claude claude-sonnet-4-6 (agentic loop)               │
+│  • Lee archivos fuente del módulo afectado               │
+│  • Propone fix técnico concreto con risk assessment      │
+│  • Emite log: stage=fix_recommendation                   │
+└──────────────────────────┬──────────────────────────────┘
+                           │ fix_recommendation_result
+                           ▼
+┌─────────────────────────────────────────────────────────┐
 │                    TicketAgent                           │
 │  • Construye payload de la Card de Trello                │
 │  • Crea Card via Trello REST API                         │
@@ -86,6 +105,8 @@ Pipeline de 5 agentes especializados que procesan un reporte de incidente de ext
 |---|---|---|
 | **IngestAgent** | Validación, sanitización, persistencia | No toma decisiones de negocio. No llama al LLM. No crea tickets. |
 | **TriageAgent** | Análisis y clasificación del incidente | No crea tickets. No notifica. No persiste directamente (solo el resultado del análisis). |
+| **QAAgent** | Evalúa cobertura de tests del módulo afectado y propone tests de regresión | No clasifica el incidente. No crea tickets. Si falla, el pipeline continúa con `qa_incomplete=True`. |
+| **FixRecommendationAgent** | Propone fix técnico concreto con risk assessment | No valida ni ejecuta el fix. No crea tickets. Si falla, el pipeline continúa con `fix_incomplete=True`. |
 | **TicketAgent** | Integración con el sistema de ticketing (Trello) | No interpreta el reporte. No analiza el codebase. |
 | **NotifyAgent** | Comunicación externa (Slack + email) | No genera contenido técnico. Recibe mensajes formateados y los despacha. |
 | **ResolutionWatcher** | Detección de tickets resueltos | No notifica directamente. Delega siempre a NotifyAgent. |
@@ -102,7 +123,9 @@ FastAPI Application Server
 │   ├── [sync]  Retorna HTTP 201 al cliente con trace_id
 │   └── [async] BackgroundTask → pipeline(incident_id)
 │                   ├── TriageAgent.process(incident_id)
-│                   ├── TicketAgent.process(triage_result)
+│                   ├── QAAgent.process(triage_result)
+│                   ├── FixRecommendationAgent.process(triage_result, qa_result)
+│                   ├── TicketAgent.process(triage_result, qa_result, fix_result)
 │                   └── NotifyAgent.process(ticket_result, "team_alert" + "reporter_confirmation")
 │
 ├── GET /api/incidents/:id → estado del pipeline
