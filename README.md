@@ -1,7 +1,7 @@
 # SRE Incident Intake & Triage Agent
 
 > Submitted for **AgentX Hackathon** by SoftServe — April 2026  
-> Tag: [#AgentXHackathon](https://youtube.com)
+> Tag: [#AgentXHackathon](https://www.youtube.com/watch?v=dMw-ql1aN5o) — [📺 Demo Video](https://www.youtube.com/watch?v=dMw-ql1aN5o)
 
 ---
 
